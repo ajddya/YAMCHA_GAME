@@ -434,6 +434,7 @@ def download_dataframe_as_csv(filename: str, df: pd.DataFrame):
 def csv_app():
     st.title('ファイル選択')
 
+
     st.write("_____________________________________________________________")
     # ファイルアップロード
     uploaded_file = st.file_uploader("CSVデータベースファイルをアップロードしてください", type="csv")
@@ -453,22 +454,24 @@ def csv_app():
             df = normalize_dataframe(df)
             df = sort_df(df)
             st.session_state.df = df
+            st.session_state.filename = os.path.basename(selected_csv_path)
 
-    # セッションにデータがあれば処理続行
-    if st.session_state.df is not None:
+    # セッションにデータがあるか安全に確認
+    if "df" in st.session_state and st.session_state.df is not None:
         st.write(f"アップロードされたファイル名: `{st.session_state.filename}`")
         check_box = st.checkbox("アップロードファイルを表示")
         if check_box:
-            st.dataframe(st.session_state.df)   # データフレームを表示
+            st.dataframe(st.session_state.df)
     else:
         st.info("CSVファイルをアップロードしてください。")
-        
+
     st.write("_____________________________________________________________")
     if st.button("データベース作成"):
         st.session_state.page_id_flag = False
         st.session_state.page_id = "データベース作成"
+        # rerun前に必要なセッションキーが揃っていることを保証
         st.experimental_rerun()
-
+        
 def create_csv():
     st.title("データベース作成")
     st.write("_____________________________________________________________")
