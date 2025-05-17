@@ -442,6 +442,7 @@ def csv_app():
     if uploaded_file is not None:
         # CSVをデータフレームとして読み込む
         df = pd.read_csv(uploaded_file)
+        df = normalize_dataframe(df)
         df = sort_df(df)
         st.session_state.df = df  # セッションに保存
         st.session_state.filename = uploaded_file.name  # ファイル名も保存
@@ -449,6 +450,7 @@ def csv_app():
         selected_csv_path = select_csv_from_list_folder()
         if selected_csv_path:
             df = pd.read_csv(selected_csv_path)
+            df = normalize_dataframe(df)
             df = sort_df(df)
             st.session_state.df = df
 
