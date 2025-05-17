@@ -44,7 +44,7 @@ def init():
         st.session_state.create_df_temp = pd.DataFrame(columns=columns)
 
     if "player_df" not in st.session_state:
-        st.session_state.player_df = pd.read_csv("player/PLAYER.csv")
+        st.session_state.player_df = pd.read_csv("player/player.csv")
 
     if "image_name" not in st.session_state:
         st.session_state.image_name = None
