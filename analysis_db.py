@@ -8,6 +8,7 @@ import ast
 import math
 import unicodedata
 import re
+import uuid
 
 button_css1 = f"""
     <style>
@@ -54,6 +55,43 @@ def init():
 
     if "transition_flag" not in st.session_state:
         st.session_state.transition_flag = False
+
+# 文字コードを正規化
+def normalize_text(text):
+    return unicodedata.normalize('NFKC', str(text)).strip()
+
+# データフレームを正規化
+def normalize_dataframe(df):
+    df_copy = df.copy()
+    for col in df_copy.columns:
+        df_copy[col] = df_copy[col].apply(lambda x: normalize_text(x) if pd.notna(x) else x)
+    return df_copy
+
+def normalize_filename(filename):
+    return unicodedata.normalize('NFKC', filename)
+
+def normalize_image_filenames(image_root="image"):
+    color_folders = ["赤", "青", "緑", "黄", "紫"]
+    for color in color_folders:
+        folder_path = os.path.join(image_root, color)
+        if not os.path.exists(folder_path):
+            continue
+
+        for filename in os.listdir(folder_path):
+            normalized_name = normalize_filename(filename)
+
+            if filename != normalized_name:
+                old_path = os.path.join(folder_path, filename)
+                # 一時ファイル名で確実に回避
+                temp_name = f"__temp__{uuid.uuid4().hex}.tmp"
+                temp_path = os.path.join(folder_path, temp_name)
+                new_path = os.path.join(folder_path, normalized_name)
+
+                # ① 一度仮名にリネーム（同一名衝突回避のため）
+                os.rename(old_path, temp_path)
+
+                # ② 正規化された名前にリネーム
+                os.rename(temp_path, new_path)
 
 # --- 🔽 各列をあいうえお順に並べ替え ---
 # 各列をソートしてから、NaNで埋めて長さを揃える
@@ -168,18 +206,6 @@ def save_csv():
 
     else:
         st.sidebar.write("データの保存に失敗しました。")
-
-
-# 文字コードを正規化
-def normalize_text(text):
-    return unicodedata.normalize('NFKC', str(text)).strip()
-
-# データフレームを正規化
-def normalize_dataframe(df):
-    df_copy = df.copy()
-    for col in df_copy.columns:
-        df_copy[col] = df_copy[col].apply(lambda x: normalize_text(x) if pd.notna(x) else x)
-    return df_copy
 
 # デッキ名からTierを出力する
 def Tier_of_Deck(deck_name):
@@ -995,7 +1021,12 @@ def debag():
     st.write("赤フォルダのファイル一覧:")
     try:
         red_images = os.listdir("image/赤")
-        st.write(red_images)
+        st.write(normalize_text(st.session_state.df["🔴赤"][1])+".png")
+        st.write(normalize_text(red_images[17]))
+        flag = normalize_text(red_images[17]) == red_images[17]
+        st.write(flag)
+        flag2 = st.session_state.df["🔴赤"][1]+".png" == red_images[17]
+        st.write(flag2)
     except FileNotFoundError:
         st.warning("赤フォルダが見つかりません")
 
@@ -1024,6 +1055,8 @@ def debag():
 def main():
 
     init()
+
+    normalize_image_filenames()
 
     page_id_list = ["データベース選択","ランダム抽出","Deck_Customize","プレイヤー情報","プレイヤー設定","デバッグページ"]
 
