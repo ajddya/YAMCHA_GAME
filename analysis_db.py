@@ -350,14 +350,17 @@ def output_image(df, image_name):
 
 # データフレームの要素を3列で全て表示(selectboxで列を指定して表示)
 def three_way_output_image(df, selected_column=None, selected_title=None, selected_player=None, selected_df=None):
+    # 必要な変数を初期化
+    image_names = []
 
     if selected_column is not None:
-        # NaNを除いて値を取得し、.pngを付与
+        # NaNを除いて値を取得し、正規化して .png を付与
         image_names = df[selected_column].dropna().astype(str).tolist()
+        image_names = [normalize_text(name) for name in image_names]
         image_names = [name + ".png" if not name.endswith(".png") else name for name in image_names]
 
     if selected_title is not None:
-        image_names = selected_title
+        image_names = [normalize_text(name) for name in selected_title]
         image_names = [name + ".png" if not name.endswith(".png") else name for name in image_names]
 
     # 画像を3つずつ横並びで表示
@@ -367,19 +370,22 @@ def three_way_output_image(df, selected_column=None, selected_title=None, select
             with cols[j]:
                 output_image(df, image_name)
                 if selected_player is not None:
-                    if st.button(f'{selected_player}に登録',key=f"image_{i}_{j}"):
+                    if st.button(f'{selected_player}に登録', key=f"image_{i}_{j}"):
                         save_image_names(selected_player, image_name)
                 elif selected_df is not None:
-                    if st.button('データフレームに登録',key=f"image_{i}_{j}"):
+                    if st.button('データフレームに登録', key=f"image_{i}_{j}"):
                         if selected_title is not None:
-                            # image_nameからselected_solumnを作成
+                            # image_nameからselected_columnを特定
                             deck_name = image_name.replace(".png", "")
-                            selected_column = next((col for col in selected_df.columns 
-                                if deck_name in selected_df[col].values), None)
-                            
+                            deck_name = normalize_text(deck_name)
+                            selected_column = next(
+                                (col for col in selected_df.columns if deck_name in selected_df[col].apply(normalize_text).values),
+                                None
+                            )
                         # selected_dfにデッキを登録
-                        st.session_state.create_df_temp = save_image_names_to_df(st.session_state.create_df_temp, selected_column, image_name)                   
-
+                        st.session_state.create_df_temp = save_image_names_to_df(
+                            st.session_state.create_df_temp, selected_column, image_name
+                        )
 # 指定プレイヤーの image_names から特定の image_name を削除する関数
 def remove_image_name(player, image_name):
     # プレイヤーの行インデックスを取得
