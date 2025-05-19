@@ -357,19 +357,19 @@ def output_image(df, image_name):
             break
 
     if os.path.exists(image_path_red):
-        st.image(image_path_red, width=150, use_column_width=False)
+        st.image(image_path_red, width=150, use_container_width=False)
         st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     elif os.path.exists(image_path_bulue):
-        st.image(image_path_bulue, width=150, use_column_width=False)
+        st.image(image_path_bulue, width=150, use_container_width=False)
         st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     elif os.path.exists(image_path_green):
-        st.image(image_path_green, width=150, use_column_width=False)
+        st.image(image_path_green, width=150, use_container_width=False)
         st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     elif os.path.exists(image_path_yellow):
-        st.image(image_path_yellow, width=150, use_column_width=False)
+        st.image(image_path_yellow, width=150, use_container_width=False)
         st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     elif os.path.exists(image_path_purple):
-        st.image(image_path_purple, width=150, use_column_width=False)
+        st.image(image_path_purple, width=150, use_container_width=False)
         st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     else:
         st.error(f"画像ファイルが見つかりません")
@@ -496,22 +496,22 @@ def csv_app():
         st.session_state.page_id_flag = False
         st.session_state.page_id = "データベース作成"
         # rerun前に必要なセッションキーが揃っていることを保証
-        st.experimental_rerun()
+        st.rerun()
         
 def create_csv():
     st.title("データベース作成")
     st.write("_____________________________________________________________")
     if st.button("2つのアップロードファイルを結合して作成"):
         st.session_state.page_id = "データベース作成_1"
-        st.experimental_rerun()
+        st.rerun()
 
     if st.button("1つのアップロードファイルにデッキを追加して作成"):
         st.session_state.page_id = "データベース作成_2"
-        st.experimental_rerun()
+        st.rerun()
 
     if st.button("最初からファイルを作成"):
         st.session_state.page_id = "データベース作成_3_1"
-        st.experimental_rerun()
+        st.rerun()
     st.write("_____________________________________________________________")
     st.write("作成したデータベースを確認　＆　ダウンロード")
 
@@ -528,7 +528,7 @@ def create_csv():
     if st.button("戻る"):
         st.session_state.page_id = "データベース選択"
         st.session_state.page_id_flag = True
-        st.experimental_rerun()
+        st.rerun()
 
 # 2つのアップロードファイルを結合して作成
 def create_csv_1():
@@ -594,7 +594,7 @@ def create_csv_1():
     st.write("_____________________________________________________________")
     if st.button("戻る"):
         st.session_state.page_id = "データベース作成"
-        st.experimental_rerun()
+        st.rerun()
 
 # 1つのアップロードファイルにデッキを追加して作成
 def create_csv_2():
@@ -621,7 +621,7 @@ def create_csv_2():
     if st.button("デッキ一覧表示"):
         st.session_state.transition_flag = True
         st.session_state.page_id = "データベース作成_3_1"
-        st.experimental_rerun()
+        st.rerun()
     ##############################################################
 
     if not st.session_state.create_df_temp.empty:
@@ -646,7 +646,7 @@ def create_csv_2():
     st.write("_____________________________________________________________")
     if st.button("戻る"):
         st.session_state.page_id = "データベース作成"
-        st.experimental_rerun()
+        st.rerun()
 
 # 色からファイルを作成
 def create_csv_3_1():
@@ -656,18 +656,18 @@ def create_csv_3_1():
         if st.sidebar.button("戻る"):
             st.session_state.transition_flag = False
             st.session_state.page_id = "データベース作成_2"
-            st.experimental_rerun()
+            st.rerun()
     else:
         if st.sidebar.button("データベース作成画面に戻る"):
             st.session_state.page_id = "データベース作成"
-            st.experimental_rerun()
+            st.rerun()
     st.sidebar.write("______________________________________")
     
     ##################### subheader #####################
     st.write("______________________________________")
     if st.button("タイトルからデッキを選択"):
         st.session_state.page_id = "データベース作成_3_2"
-        st.experimental_rerun()
+        st.rerun()
 
     st.write("______________________________________")
 
@@ -741,17 +741,17 @@ def create_csv_3_2():
         if st.sidebar.button("戻る"):
             st.session_state.transition_flag = False
             st.session_state.page_id = "データベース作成_2"
-            st.experimental_rerun()
+            st.rerun()
     else:
         if st.sidebar.button("データベース作成画面に戻る"):
             st.session_state.page_id = "データベース作成"
-            st.experimental_rerun()
+            st.rerun()
     st.sidebar.write("______________________________________")
     ##################### subheader #####################
     st.write("______________________________________")
     if st.button("色からデッキを選択"):
         st.session_state.page_id = "データベース作成_3_1"
-        st.experimental_rerun()
+        st.rerun()
 
     st.write("______________________________________")
     
