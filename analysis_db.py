@@ -443,7 +443,7 @@ def csv_app():
     if uploaded_file is not None:
         # CSVをデータフレームとして読み込む
         df = pd.read_csv(uploaded_file)
-        # df = normalize_dataframe(df)
+        df = normalize_dataframe(df)
         df = sort_df(df)
         st.session_state.df = df  # セッションに保存
         st.session_state.filename = uploaded_file.name  # ファイル名も保存
@@ -451,7 +451,7 @@ def csv_app():
         selected_csv_path = select_csv_from_list_folder()
         if selected_csv_path:
             df = pd.read_csv(selected_csv_path)
-            # df = normalize_dataframe(df)
+            df = normalize_dataframe(df)
             df = sort_df(df)
             st.session_state.df = df
             st.session_state.filename = os.path.basename(selected_csv_path)
@@ -991,6 +991,13 @@ def player_set():
 
 def debag():
     st.title("デバッグページ")
+
+    st.write("赤フォルダのファイル一覧:")
+    try:
+        red_images = os.listdir("image/赤")
+        st.write(red_images)
+    except FileNotFoundError:
+        st.warning("赤フォルダが見つかりません")
 
     unique_titles = extract_unique_titles(st.session_state.df)
     st.write("抽出された作品名一覧（あいうえお順）:")
