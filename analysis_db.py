@@ -310,19 +310,19 @@ def merge_dfs_with_function(df1, df2):
 
 # 名前から画像を表示する
 def output_image(df, image_name):
-    # 画像フォルダと結合
+
     image_path_red = os.path.join("image/赤", image_name)
     image_path_bulue = os.path.join("image/青", image_name)
     image_path_green = os.path.join("image/緑", image_name)
     image_path_yellow = os.path.join("image/黄", image_name)
     image_path_purple = os.path.join("image/紫", image_name)
 
-    # 該当セルの位置を探す
-    target_value = image_name.replace(".png", "")
+    target_value = normalize_text(image_name.replace(".png", ""))
     found = False
     for row_idx in range(len(df)):
         for col_idx in range(len(df.columns)):
-            if df.iat[row_idx, col_idx] == target_value:
+            cell_value = df.iat[row_idx, col_idx]
+            if pd.notna(cell_value) and normalize_text(cell_value) == target_value:
                 col_name = df.columns[col_idx]
                 st.write(f"{col_name}  {target_value}")
                 found = True
@@ -331,19 +331,19 @@ def output_image(df, image_name):
             break
 
     if os.path.exists(image_path_red):
-        st.image(image_path_red,width=150, use_column_width=False)
+        st.image(image_path_red, width=150, use_column_width=False)
         st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     elif os.path.exists(image_path_bulue):
-        st.image(image_path_bulue,width=150, use_column_width=False)
+        st.image(image_path_bulue, width=150, use_column_width=False)
         st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     elif os.path.exists(image_path_green):
-        st.image(image_path_green,width=150, use_column_width=False)
+        st.image(image_path_green, width=150, use_column_width=False)
         st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     elif os.path.exists(image_path_yellow):
-        st.image(image_path_yellow,width=150, use_column_width=False)
+        st.image(image_path_yellow, width=150, use_column_width=False)
         st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     elif os.path.exists(image_path_purple):
-        st.image(image_path_purple,width=150, use_column_width=False)
+        st.image(image_path_purple, width=150, use_column_width=False)
         st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     else:
         st.error(f"画像ファイルが見つかりません")
