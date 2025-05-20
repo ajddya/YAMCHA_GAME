@@ -95,8 +95,8 @@ def normalize_image_filenames(image_root="image"):
 
 # --- 🔽 各列をあいうえお順に並べ替え ---
 # 各列をソートしてから、NaNで埋めて長さを揃える
-def sort_df(df):
-    columns = ["🔴赤", "🔵青", "🟡黄", "🟢緑", "🟣紫"]
+def sort_df(df, columns = ["🔴赤", "🔵青", "🟡黄", "🟢緑", "🟣紫"]):
+    
     sort_df = pd.DataFrame(columns=columns)
 
     max_len = 0
@@ -178,6 +178,26 @@ def extract_elements_by_title(df, target_title):
                 matched_elements.append(cell)
 
     return matched_elements
+
+# dfをTierで並べ替え
+def df_to_tier_df(df):
+    # Tier の分類リスト（必要に応じて変更）
+    tier_list = ["Tier1.0", "Tier1.5", "Tier2.0", "Tier2.5", "Tier3.0", "Tier4.0", "Tier5.0"]
+    tier_df = pd.DataFrame(columns=tier_list)
+
+    for col in df.columns:
+        for val in df[col]:
+            if pd.notna(val):
+                tier_num = Tier_of_Deck(val)
+                tier = "Tier" + str(tier_num)
+                if tier in tier_list:
+                    tier_df = save_image_names_to_df(tier_df, tier, val)
+                else:
+                    st.warning(f"Tierが無効または未定義です: {val} → {tier}")
+
+    tier_df = sort_df(tier_df, tier_list)
+
+    return tier_df
 
 # dfからランダムに1要素を抽出
 def get_random(df):
@@ -350,7 +370,7 @@ def output_image(df, image_name):
             cell_value = df.iat[row_idx, col_idx]
             if pd.notna(cell_value) and normalize_text(cell_value) == target_value:
                 col_name = df.columns[col_idx]
-                st.write(f"{col_name}  {target_value}")
+                st.write(f"{target_value}")
                 found = True
                 break
         if found:
@@ -381,6 +401,8 @@ def three_way_output_image(df, selected_column=None, selected_title=None, select
         # NaNを除いて値を取得し、.pngを付与
         image_names = df[selected_column].dropna().astype(str).tolist()
         image_names = [name + ".png" if not name.endswith(".png") else name for name in image_names]
+        if image_names == []:
+            st.header("該当条件を満たすデッキはありません")
 
     if selected_title is not None:
         image_names = selected_title
@@ -402,6 +424,15 @@ def three_way_output_image(df, selected_column=None, selected_title=None, select
                             deck_name = image_name.replace(".png", "")
                             selected_column = next((col for col in selected_df.columns 
                                 if deck_name in selected_df[col].values), None)
+
+                        if selected_column in ["Tier1.0", "Tier1.5", "Tier2.0", "Tier2.5", "Tier3.0", "Tier4.0", "Tier5.0"]:
+                            if "create_df_temp2" in st.session_state and not st.session_state.create_df_temp2.empty:
+                                # selected_columnをTier_numから色に変える
+                                deck_name = image_name.replace(".png", "")
+                                for col in st.session_state.create_df_temp2.columns:
+                                    if deck_name in st.session_state.create_df_temp2[col].values:
+                                        selected_column = col
+                                        break
                             
                         # selected_dfにデッキを登録
                         st.session_state.create_df_temp = save_image_names_to_df(st.session_state.create_df_temp, selected_column, image_name)                   
@@ -488,6 +519,19 @@ def csv_app():
         check_box = st.checkbox("アップロードファイルを表示")
         if check_box:
             st.dataframe(st.session_state.df)
+            tier_values = []
+
+            for col in st.session_state.df.columns:
+                for val in st.session_state.df[col]:
+                    if pd.notna(val):
+                        tier_num = Tier_of_Deck(val)
+                        if tier_num is not None:
+                            tier_values.append(tier_num)
+
+            if tier_values:
+                average_tier = sum(tier_values) / len(tier_values)
+                st.write(f"平均Tier: {average_tier:.2f}")
+
     else:
         st.info("CSVファイルをアップロードしてください。")
 
@@ -650,7 +694,7 @@ def create_csv_2():
 
 # 色からファイルを作成
 def create_csv_3_1():
-    st.title("色からデッキを選択")
+    st.title("最初からデッキを選択")
     # フラグによって戻り先を制御
     if st.session_state.transition_flag:
         if st.sidebar.button("戻る"):
@@ -664,12 +708,6 @@ def create_csv_3_1():
     st.sidebar.write("______________________________________")
     
     ##################### subheader #####################
-    st.write("______________________________________")
-    if st.button("タイトルからデッキを選択"):
-        st.session_state.page_id = "データベース作成_3_2"
-        st.rerun()
-
-    st.write("______________________________________")
 
     if "create_df_temp2" not in st.session_state:
         columns = ["🔴赤", "🔵青", "🟡黄", "🟢緑", "🟣紫"]
@@ -707,108 +745,66 @@ def create_csv_3_1():
         # 保存 & 表示
         st.session_state.create_df_temp2 = sort_df(create_df_temp2)
 
-    if "create_df_temp2" in st.session_state and not st.session_state.create_df_temp2.empty:
-        # 列名を取得してセレクトボックスで表示
-        selected_column = st.selectbox(
-            "列を選択してください",
-            options=st.session_state.create_df_temp2.columns.tolist()
-        )
-        
-        # 選択された列名を表示（任意）
-        st.write(f"選択された列: {selected_column}")
+    # Tier別dfを作成
+    st.session_state.Tier_df = df_to_tier_df(st.session_state.create_df_temp2)
 
-        selected_player=None
-        selected_title=None
-        three_way_output_image(st.session_state.create_df_temp2, selected_column, selected_title, selected_player, st.session_state.create_df_temp2)
-    else:
-        st.warning("データフレームが存在しないか空です。")
+    select_method = st.radio("一覧表示方式を選択してください", ["色別", "タイトル別", "Tier別"], horizontal=True)
 
-    if st.sidebar.button("CSVとして保存"):
-        st.session_state.create_df = st.session_state.create_df_temp
-        st.sidebar.success("アップロードファイルとして保存しました")
+    if select_method == "色別":
+        if "create_df_temp2" in st.session_state and not st.session_state.create_df_temp2.empty:
+            # 列名を取得してセレクトボックスで表示
+            selected_column = st.selectbox(
+                "列を選択してください",
+                options=st.session_state.create_df_temp2.columns.tolist()
+            )
+            
+            # 選択された列名を表示（任意）
+            st.write(f"選択された列: {selected_column}")
 
-    st.sidebar.dataframe(st.session_state.create_df_temp)
-    # 作成したデータフレーム確認
-    for col in st.session_state.create_df_temp.columns:
-        st.sidebar.write(f"{col} ")
-        st.sidebar.write(st.session_state.create_df_temp[col].dropna().tolist())
-# タイトルからファイルを作成
-def create_csv_3_2():
-    st.title("タイトルからデッキを選択")
-    ##################### subheader #####################
-    # フラグによって戻り先を制御
-    if st.session_state.transition_flag:
-        if st.sidebar.button("戻る"):
-            st.session_state.transition_flag = False
-            st.session_state.page_id = "データベース作成_2"
-            st.rerun()
-    else:
-        if st.sidebar.button("データベース作成画面に戻る"):
-            st.session_state.page_id = "データベース作成"
-            st.rerun()
-    st.sidebar.write("______________________________________")
-    ##################### subheader #####################
-    st.write("______________________________________")
-    if st.button("色からデッキを選択"):
-        st.session_state.page_id = "データベース作成_3_1"
-        st.rerun()
+            selected_player=None
+            selected_title=None
+            three_way_output_image(st.session_state.create_df_temp2, selected_column, selected_title, selected_player, st.session_state.create_df_temp2)
+        else:
+            st.warning("データフレームが存在しないか空です。")
 
-    st.write("______________________________________")
-    
-    # 全てのデッキ名を出力するためのdf
-    if "create_df_temp2" not in st.session_state:
-        columns = ["🔴赤", "🔵青", "🟡黄", "🟢緑", "🟣紫"]
-        create_df_temp2 = pd.DataFrame(columns=columns)
-        # 赤のpngファイル名を全て抽出
-        png_files1 = list_png_files("image/赤")
-        for file1 in png_files1:
-            target_value1 = file1.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🔴赤",target_value1)
+    elif select_method == "タイトル別":
+        if "create_df_temp2" in st.session_state and not st.session_state.create_df_temp2.empty:
+            # 列名を取得してセレクトボックスで表示
+            unique_titles = extract_unique_titles(st.session_state.create_df_temp2)
+            st.write("抽出された作品名一覧（あいうえお順）:")
 
-        # 青のpngファイル名を全て抽出
-        png_files2 = list_png_files("image/青")
-        for file2 in png_files2:
-            target_value2 = file2.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🔵青",target_value2)
+            selected_title = st.selectbox("タイトル選択", unique_titles)
 
-        # 緑のpngファイル名を全て抽出
-        png_files3 = list_png_files("image/緑")
-        for file3 in png_files3:
-            target_value3 = file3.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟢緑",target_value3)
+            results = extract_elements_by_title(st.session_state.create_df_temp2, selected_title)
+            
+            # 選択された列名を表示（任意）
+            st.write(f"選択されたタイトル: {selected_title}")
+            
+            selected_player=None
+            selected_column=None
+            three_way_output_image(st.session_state.create_df_temp2, selected_column, results,selected_player, st.session_state.create_df_temp2)
+        else:
+            st.warning("データフレームが存在しないか空です。")
 
-        # 黄のpngファイル名を全て抽出
-        png_files4 = list_png_files("image/黄")
-        for file4 in png_files4:
-            target_value4 = file4.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟡黄",target_value4)
+    elif select_method == "Tier別":
+        # DataFrameが st.session_state に存在するか確認
+        if "Tier_df" in st.session_state and not st.session_state.Tier_df.empty:
+            tier_list = ["Tier1.0", "Tier1.5", "Tier2.0", "Tier2.5", "Tier3.0", "Tier4.0", "Tier5.0"]
 
-        # 紫のpngファイル名を全て抽出
-        png_files5 = list_png_files("image/紫")
-        for file5 in png_files5:
-            target_value5 = file5.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟣紫",target_value5)
+            # 列名を取得してセレクトボックスで表示
+            selected_column = st.selectbox(
+                "列を選択してください",
+                tier_list
+            )
+            
+            # 選択された列名を表示（任意）
+            st.write(f"選択された列: {selected_column}")
 
-        # 保存 & 表示
-        st.session_state.create_df_temp2 = sort_df(create_df_temp2)
-
-    if "create_df_temp2" in st.session_state and not st.session_state.create_df_temp2.empty:
-        # 列名を取得してセレクトボックスで表示
-        unique_titles = extract_unique_titles(st.session_state.create_df_temp2)
-        st.write("抽出された作品名一覧（あいうえお順）:")
-
-        selected_title = st.selectbox("タイトル選択", unique_titles)
-
-        results = extract_elements_by_title(st.session_state.create_df_temp2, selected_title)
-        
-        # 選択された列名を表示（任意）
-        st.write(f"選択されたタイトル: {selected_title}")
-        
-        selected_player=None
-        selected_column=None
-        three_way_output_image(st.session_state.create_df_temp2, selected_column, results,selected_player, st.session_state.create_df_temp2)
-    else:
-        st.warning("データフレームが存在しないか空です。")
+            selected_player=None
+            selected_title=None
+            three_way_output_image(st.session_state.Tier_df, selected_column, selected_title, selected_player, st.session_state.Tier_df)
+        else:
+            st.warning("データフレームが存在しないか空です。")
 
     if st.sidebar.button("CSVとして保存"):
         st.session_state.create_df = st.session_state.create_df_temp
@@ -819,6 +815,7 @@ def create_csv_3_2():
     for col in st.session_state.create_df_temp.columns:
         st.sidebar.write(f"{col} ")
         st.sidebar.write(st.session_state.create_df_temp[col].dropna().tolist())
+
 
 def random_app():
     st.title("ランダム抽出")
@@ -883,22 +880,62 @@ def customize():
     st.write(f"選択されたプレイヤー: {selected_player}")
     st.write("_____________________________________________________________")
 
+    select_method = st.radio("一覧表示方式を選択してください", ["色別", "タイトル別", "Tier別"], horizontal=True)
 
-    # DataFrameが st.session_state に存在するか確認
-    if "df" in st.session_state and not st.session_state.df.empty:
-        # 列名を取得してセレクトボックスで表示
-        selected_column = st.selectbox(
-            "列を選択してください",
-            options=st.session_state.df.columns.tolist()
-        )
-        
-        # 選択された列名を表示（任意）
-        st.write(f"選択された列: {selected_column}")
+    if select_method == "色別":
+        # DataFrameが st.session_state に存在するか確認
+        if "df" in st.session_state and not st.session_state.df.empty:
+            # 列名を取得してセレクトボックスで表示
+            selected_column = st.selectbox(
+                "列を選択してください",
+                options=st.session_state.df.columns.tolist()
+            )
+            
+            # 選択された列名を表示（任意）
+            st.write(f"選択された列: {selected_column}")
 
-        selected_title = None
-        three_way_output_image(st.session_state.df, selected_column, selected_title, selected_player)
-    else:
-        st.warning("データフレームが存在しないか空です。")
+            selected_title = None
+            three_way_output_image(st.session_state.df, selected_column, selected_title, selected_player)
+        else:
+            st.warning("データフレームが存在しないか空です。")
+
+    elif select_method == "タイトル別":
+        if "df" in st.session_state and not st.session_state.df.empty:
+            # 列名を取得してセレクトボックスで表示
+            unique_titles = extract_unique_titles(st.session_state.df)
+
+            selected_title = st.selectbox("タイトル選択", unique_titles)
+
+            results = extract_elements_by_title(st.session_state.df, selected_title)
+            
+            # 選択された列名を表示（任意）
+            st.write(f"選択されたタイトル: {selected_title}")
+            
+            selected_column=None
+            three_way_output_image(st.session_state.df, selected_column, results, selected_player)
+        else:
+            st.warning("データフレームが存在しないか空です。")
+
+    elif select_method == "Tier別":
+        st.session_state.Tier_df = df_to_tier_df(st.session_state.df)
+
+        # DataFrameが st.session_state に存在するか確認
+        if "Tier_df" in st.session_state and not st.session_state.Tier_df.empty:
+            tier_list = ["Tier1.0", "Tier1.5", "Tier2.0", "Tier2.5", "Tier3.0", "Tier4.0", "Tier5.0"]
+
+            # 列名を取得してセレクトボックスで表示
+            selected_column = st.selectbox(
+                "列を選択してください",
+                tier_list
+            )
+            
+            # 選択された列名を表示（任意）
+            st.write(f"選択された列: {selected_column}")
+
+            selected_title=None
+            three_way_output_image(st.session_state.Tier_df, selected_column, selected_title, selected_player)
+        else:
+            st.warning("データフレームが存在しないか空です。")
 
 def player_info():
     st.title("プレイヤー情報")
@@ -964,7 +1001,7 @@ def player_set():
     # CSV読み込み（セッション内に保持）
     if "player_df" not in st.session_state:
         try:
-            st.session_state.player_df = pd.read_csv("player/PLAYER.csv")
+            st.session_state.player_df = pd.read_csv("player/player.csv")
         except FileNotFoundError:
             st.error("PLAYER.csv が見つかりません。ファイルを正しい場所に置いてください。")
             st.stop()
@@ -1014,38 +1051,29 @@ def player_set():
 
 ##############################################################################################
 
-
 def debag():
     st.title("デバッグページ")
 
-    st.write("赤フォルダのファイル一覧:")
-    try:
-        red_images = os.listdir("image/赤")
-        st.write(normalize_text(st.session_state.df["🔴赤"][1])+".png")
-        st.write(normalize_text(red_images[17]))
-        flag = normalize_text(red_images[17]) == red_images[17]
-        st.write(flag)
-        flag2 = st.session_state.df["🔴赤"][1]+".png" == red_images[17]
-        st.write(flag2)
-    except FileNotFoundError:
-        st.warning("赤フォルダが見つかりません")
-
-    unique_titles = extract_unique_titles(st.session_state.df)
-    st.write("抽出された作品名一覧（あいうえお順）:")
-
-    selected_title = st.selectbox("タイトル選択", unique_titles)
-
-    results = extract_elements_by_title(st.session_state.df, selected_title)
-
-    st.write(f"作品名「{selected_title}」に該当する全ての要素:")
-    for deck in results:
-        output_image(st.session_state.df, f"{deck}.png")
-
     ########################## データフレームをTierで並び替える関数を実行 #############################
-    # dfから要素を１つ１つ持ってきてTierを計算
-    # Tier_df_tempの各項目[Tier1, Tier1.5, .. , Tier5]列に挿入
-    # selectboxで選択したTierの全てのデッキを出力
-    # three_way_output_image(df, selected_column=None, selected_title=None, selected_player=None, selected_df=None)で画像を出力
+
+    st.session_state.Tier_df = df_to_tier_df(st.session_state.df)
+
+    # DataFrameが st.session_state に存在するか確認
+    if "Tier_df" in st.session_state and not st.session_state.Tier_df.empty:
+        tier_list = ["Tier1.0", "Tier1.5", "Tier2.0", "Tier2.5", "Tier3.0", "Tier4.0", "Tier5.0"]
+
+        # 列名を取得してセレクトボックスで表示
+        selected_column = st.selectbox(
+            "列を選択してください",
+            tier_list
+        )
+        
+        # 選択された列名を表示（任意）
+        st.write(f"選択された列: {selected_column}")
+
+        three_way_output_image(st.session_state.Tier_df, selected_column, selected_title=None, selected_player=None)
+    else:
+        st.warning("データフレームが存在しないか空です。")
 
     #############################################################################################
 
@@ -1110,10 +1138,6 @@ def main():
     # 色からファイルを作成
     if st.session_state.page_id == "データベース作成_3_1":
         create_csv_3_1()
-
-    # タイトルからファイルを作成
-    if st.session_state.page_id == "データベース作成_3_2":
-        create_csv_3_2()
 
     if st.session_state.page_id == "ランダム抽出":
         random_app()
