@@ -495,6 +495,7 @@ def csv_app():
     st.write("_____________________________________________________________")
     # ファイルアップロード
     uploaded_file = st.file_uploader("CSVデータベースファイルをアップロードしてください", type="csv")
+    
     st.write("_____________________________________________________________")
 
     if uploaded_file is not None:
@@ -530,6 +531,7 @@ def csv_app():
 
             if tier_values:
                 average_tier = sum(tier_values) / len(tier_values)
+                st.write(f"総デッキ数: {len(tier_values)}")
                 st.write(f"平均Tier: {average_tier:.2f}")
 
     else:
