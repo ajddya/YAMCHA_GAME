@@ -435,7 +435,8 @@ def three_way_output_image(df, selected_column=None, selected_title=None, select
                                         break
                             
                         # selected_dfにデッキを登録
-                        st.session_state.create_df_temp = save_image_names_to_df(st.session_state.create_df_temp, selected_column, image_name)                   
+                        st.session_state.create_df_temp = save_image_names_to_df(st.session_state.create_df_temp, selected_column, image_name)     
+        st.write("_____________________________________________________________")              
 
 # 指定プレイヤーの image_names から特定の image_name を削除する関数
 def remove_image_name(player, image_name):
@@ -487,6 +488,16 @@ def download_dataframe_as_csv(filename: str, df: pd.DataFrame):
         st.warning("ダウンロードするデータがありません。")
 
 #_________________________________________________________________________________________________________________
+
+def home_screen():
+    st.header("やむちゃゲーム　〜ユニオンアリーナ〜")
+
+    image_path = os.path.join("ホーム画面", "ホーム画面.png")
+    st.image(image_path)
+
+    if st.button("スタート"):
+        st.session_state.page_id = "データベース選択"
+        st.rerun()
 
 def csv_app():
     st.title('ファイル選択')
@@ -1091,9 +1102,9 @@ def main():
     page_id_list = ["データベース選択","ランダム抽出","Deck_Customize","プレイヤー情報","プレイヤー設定","デバッグページ"]
 
     if "page_id" not in st.session_state:
-        st.session_state.page_id = "データベース選択"
+        st.session_state.page_id = "ホーム画面"
 
-    if st.session_state.page_id_flag:
+    if st.session_state.page_id_flag and st.session_state.page_id is not "ホーム画面":
         page_id = st.sidebar.selectbox("ページ選択", page_id_list)
         st.session_state.page_id = page_id
 
@@ -1122,6 +1133,9 @@ def main():
         chec_box = st.sidebar.checkbox("画面更新用",key="update")
         if chec_box:
             st.sidebar.success("画面が更新されました")
+
+    if st.session_state.page_id == "ホーム画面":
+        home_screen()
 
     if st.session_state.page_id == "データベース選択":
         csv_app()
