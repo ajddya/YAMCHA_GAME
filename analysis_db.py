@@ -56,6 +56,16 @@ def init():
     if "transition_flag" not in st.session_state:
         st.session_state.transition_flag = False
 
+    if "output_decks" not in st.session_state:
+        st.session_state.output_decks = []
+
+    if "output_deck_num_default" not in st.session_state:
+        st.session_state.output_deck_num_default = 1
+
+    if "player_num_default" not in st.session_state:
+        st.session_state.player_num_default = 1
+
+
 # 文字コードを正規化
 def normalize_text(text):
     return unicodedata.normalize('NFKC', str(text)).strip()
@@ -209,7 +219,7 @@ def get_random(df):
         if pd.notna(random_value):  # 選択された要素は NaN ではない
             break
         
-    return row_idx, col_idx, random_value
+    return random_value
 
 # new_player_list を player にコピーする
 def save_csv():
@@ -834,9 +844,12 @@ def random_app():
     st.title("ランダム抽出")
 
     if st.session_state.df is not None:
-        st.write(f"アップロードされたファイル名: `{st.session_state.filename}`")
-        st.dataframe(st.session_state.df)   # データフレームを表示
+        st.write(f"選択されているファイル: `{st.session_state.filename}`")
+        check_box = st.checkbox("アップロードファイルを表示")
+        if check_box:
+            st.dataframe(st.session_state.df)   # データフレームを表示
 
+        st.write("_____________________________________________________________")
 
         # 名前の選択ボックス
         selected_player = st.selectbox(
@@ -850,34 +863,81 @@ def random_app():
         st.write(f"選択されたプレイヤー: {selected_player}")
         st.write(f"プレイヤーの平均Tier: {avg_tier}")
 
+        st.write("_____________________________________________________________")
+
         # 均一ルールをオンにチェックボックス
         st.session_state.uniform_role_flag = st.checkbox("均一ルール")
+        # ランダムで出力するデッキ数を選択
+        random_deck_num = st.slider("出力するデッキ数", 1, 10, st.session_state.output_deck_num_default)
+        # スライダーのデフォルトを設定
+        st.session_state.output_deck_num_default = random_deck_num
 
         # ランダム関数を使ってDFから１つ選択する。内容がNoneなら再度実施する
         # ボタンを押したらランダム抽出
         if st.button("ランダム抽出"):
-            if st.session_state.uniform_role_flag and avg_tier is not None:
-                while True:
-                    row_idx, col_idx, random_value = get_random(st.session_state.df)
-                    deck_tier = Tier_of_Deck(random_value)
-                    if avg_tier < 2.7:
-                        if deck_tier > 2.7:
-                            break
-                    else:
-                        if deck_tier < 2.7:
-                            break
-            else:
-                row_idx, col_idx, random_value = get_random(st.session_state.df)
+            st.session_state.output_decks = []
 
-            # ファイル名を生成（例："SHY.png"）
-            st.session_state.image_name = f"{str(random_value).strip()}.png"
+            for _ in range(random_deck_num):
+
+                if st.session_state.output_decks != []:
+                    player_decks = st.session_state.player_df[st.session_state.player_df["名前"] == selected_player]["image_names"].values[0]
+                    if not pd.isna(player_decks):
+                        # player_decksをstrからリスト形式に
+                        player_decks = re.findall(r"\['(.*?)'\]", player_decks)
+                        player_decks_temp = []
+                        for deck in player_decks:
+                            deck_name = deck.replace(".png", "")
+                            player_decks_temp.append(deck_name)
+                        # シングルクォートとカンマで分割
+                        player_decks_temp = [player_decks_temp.strip(" '") for player_decks_temp in player_decks_temp[0].split(",")]
+                        deck_list_temp = st.session_state.output_decks + player_decks_temp
+                    else:
+                        deck_list_temp = st.session_state.output_decks
+                        
+                    sum_tier_temp = 0
+                    for i in range(0, len(deck_list_temp)):
+                        sum_tier_temp += Tier_of_Deck(deck_list_temp[i])
+
+                    avg_tier_temp = sum_tier_temp / len(deck_list_temp)
+                else:
+                    deck_list_temp = []
+                    avg_tier_temp = avg_tier
+
+                if st.session_state.uniform_role_flag and avg_tier_temp is not None:
+                    while True:
+                        random_value = get_random(st.session_state.df)
+                        # 重複してたらもう一度実行する
+                        if random_value not in deck_list_temp:
+                            deck_tier = Tier_of_Deck(random_value)
+                            if avg_tier_temp < 2.7:
+                                if deck_tier > 2.7:
+                                    break
+                            else:
+                                if deck_tier < 2.7:
+                                    break
+                else:
+                    while True:
+                        random_value = get_random(st.session_state.df)
+                        # 重複してたらもう一度実行する
+                        if random_value not in deck_list_temp:
+                            break
+
+                st.session_state.output_decks.append(random_value)
 
         # 画像表示（選ばれていれば常に表示）
-        if st.session_state.image_name is not None:
-            output_image(st.session_state.df, st.session_state.image_name)
+        if st.session_state.output_decks != []:
+            # 画像を3つずつ横並びで表示
+            for i in range(0, len(st.session_state.output_decks), 3):
+                cols = st.columns(3)
+                for j, image_name in enumerate(st.session_state.output_decks[i:i+3]):
+                    with cols[j]:
+                        output_image_name = image_name + ".png"
+                        output_image(st.session_state.df, output_image_name)
 
-        if st.button(f'{selected_player}にこのデッキを登録する'):
-            save_image_names(selected_player, st.session_state.image_name)
+            if st.button(f'{selected_player}にこのデッキを登録する'):
+                for i in range(0, len(st.session_state.output_decks)):
+                    output_image_name = st.session_state.output_decks[i] + ".png"
+                    save_image_names(selected_player, output_image_name)
 
 
 def customize():
@@ -958,16 +1018,28 @@ def player_info():
     if len(st.session_state.player_df) == 1:
         player_num = 1
     else:
-        player_num = st.slider("プレイヤー数", 1, len(st.session_state.player_df))
+        player_num = st.slider("プレイヤー数", 1, len(st.session_state.player_df), st.session_state.player_num_default)
+        st.session_state.player_num_default = player_num
 
+    # プレイヤー名一覧（例：DataFrameから抽出）
+    name_options = st.session_state.player_df["名前"].tolist()
+
+    # i 番目のプレイヤー選択に対応したキーを用意
     for i in range(player_num):
-        # 名前の選択ボックス（ループ内でユニークなキーを指定）
+        player_key = f"player_select_{i}"
+
+        # セッションステートにキーがなければ初期化
+        if player_key not in st.session_state:
+            st.session_state[player_key] = name_options[i]  # デフォルト値
+
+        # セレクトボックスを表示（デフォルトを現在のセッションの値に）
         selected_player = st.selectbox(
             label=f"プレイヤー {i+1} を選択してください",
-            options=st.session_state.player_df["名前"],
-            key=f"player_select_{i}"
+            options=name_options,
+            index=name_options.index(st.session_state[player_key]),
+            key=player_key  # ここでセッションと自動同期される
         )
-        # 選んだ名前の表示
+
         st.write(f"選択されたプレイヤー {i+1}: {selected_player}")
 
         # image_namesを取得（安全に抽出）
@@ -1067,28 +1139,8 @@ def player_set():
 def debag():
     st.title("デバッグページ")
 
-    ########################## データフレームをTierで並び替える関数を実行 #############################
+ 
 
-    st.session_state.Tier_df = df_to_tier_df(st.session_state.df)
-
-    # DataFrameが st.session_state に存在するか確認
-    if "Tier_df" in st.session_state and not st.session_state.Tier_df.empty:
-        tier_list = ["Tier1.0", "Tier1.5", "Tier2.0", "Tier2.5", "Tier3.0", "Tier4.0", "Tier5.0"]
-
-        # 列名を取得してセレクトボックスで表示
-        selected_column = st.selectbox(
-            "列を選択してください",
-            tier_list
-        )
-        
-        # 選択された列名を表示（任意）
-        st.write(f"選択された列: {selected_column}")
-
-        three_way_output_image(st.session_state.Tier_df, selected_column, selected_title=None, selected_player=None)
-    else:
-        st.warning("データフレームが存在しないか空です。")
-
-    #############################################################################################
 
 ##############################################################################################
 
@@ -1099,7 +1151,8 @@ def main():
 
     normalize_image_filenames()
 
-    page_id_list = ["データベース選択","ランダム抽出","Deck_Customize","プレイヤー情報","プレイヤー設定","デバッグページ"]
+    # page_id_list = ["データベース選択","ランダム抽出","Deck_Customize","プレイヤー情報","プレイヤー設定","デバッグページ"]
+    page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","プレイヤー情報","プレイヤー設定"]
 
     if "page_id" not in st.session_state:
         st.session_state.page_id = "ホーム画面"
@@ -1108,27 +1161,27 @@ def main():
         page_id = st.sidebar.selectbox("ページ選択", page_id_list)
         st.session_state.page_id = page_id
 
-        # 保存ボタンでセッションとCSVに反映
-        if st.sidebar.button("プレイヤー一覧を保存",key=f"save_button_1"):
-            try:
-                # 一時ファイルがあれば読み込んで session_state に反映
-                temp_df = pd.read_csv("player/new_player_list.csv")
-                st.session_state.player_df = temp_df
-                save_csv()
-                st.sidebar.success("プレイヤー一覧を保存しました！")
-            except FileNotFoundError:
-                st.sidebar.error("保存前に名前を追加してください。")
+        # # 保存ボタンでセッションとCSVに反映
+        # if st.sidebar.button("プレイヤー一覧を保存",key=f"save_button_1"):
+        #     try:
+        #         # 一時ファイルがあれば読み込んで session_state に反映
+        #         temp_df = pd.read_csv("player/new_player_list.csv")
+        #         st.session_state.player_df = temp_df
+        #         save_csv()
+        #         st.sidebar.success("プレイヤー一覧を保存しました！")
+        #     except FileNotFoundError:
+        #         st.sidebar.error("保存前に名前を追加してください。")
 
-        if st.sidebar.button("プレイヤー一覧を初期化(デバック用)"):
-            try:
-                # 一時ファイルがあれば読み込んで session_state に反映
-                temp_df = pd.read_csv("player_list.csv")
-                st.session_state.player_df = temp_df
-                shutil.copyfile("player_list.csv", "player/player_list.csv")
-                shutil.copyfile("player_list.csv", "player/new_player_list.csv")
-                st.sidebar.success("プレイヤー一覧を初期化しました！")
-            except FileNotFoundError:
-                st.sidebar.error("ファイルがありません。")
+        # if st.sidebar.button("プレイヤー一覧を初期化(デバック用)"):
+        #     try:
+        #         # 一時ファイルがあれば読み込んで session_state に反映
+        #         temp_df = pd.read_csv("player_list.csv")
+        #         st.session_state.player_df = temp_df
+        #         shutil.copyfile("player_list.csv", "player/player_list.csv")
+        #         shutil.copyfile("player_list.csv", "player/new_player_list.csv")
+        #         st.sidebar.success("プレイヤー一覧を初期化しました！")
+        #     except FileNotFoundError:
+        #         st.sidebar.error("ファイルがありません。")
 
         chec_box = st.sidebar.checkbox("画面更新用",key="update")
         if chec_box:
@@ -1158,7 +1211,7 @@ def main():
     if st.session_state.page_id == "ランダム抽出":
         random_app()
 
-    if st.session_state.page_id == "Deck_Customize":
+    if st.session_state.page_id == "デッキリスト_カスタマイズ":
         customize()
 
     if st.session_state.page_id == "プレイヤー情報":
