@@ -365,7 +365,7 @@ def merge_dfs_with_function(df1, df2):
     return merged_df
 
 # 名前から画像を表示する
-def output_image(df, image_name):
+def output_image(df, image_name, name_disp=True):
 
     image_path_red = os.path.join("image/赤", image_name)
     image_path_bulue = os.path.join("image/青", image_name)
@@ -380,7 +380,8 @@ def output_image(df, image_name):
             cell_value = df.iat[row_idx, col_idx]
             if pd.notna(cell_value) and normalize_text(cell_value) == target_value:
                 col_name = df.columns[col_idx]
-                st.write(f"{target_value}")
+                if name_disp:
+                    st.write(f"{target_value}")
                 found = True
                 break
         if found:
@@ -388,19 +389,24 @@ def output_image(df, image_name):
 
     if os.path.exists(image_path_red):
         st.image(image_path_red, width=150, use_container_width=False)
-        st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
+        if name_disp:
+            st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     elif os.path.exists(image_path_bulue):
         st.image(image_path_bulue, width=150, use_container_width=False)
-        st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
+        if name_disp:
+            st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     elif os.path.exists(image_path_green):
         st.image(image_path_green, width=150, use_container_width=False)
-        st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
+        if name_disp:
+            st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     elif os.path.exists(image_path_yellow):
         st.image(image_path_yellow, width=150, use_container_width=False)
-        st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
+        if name_disp:
+            st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     elif os.path.exists(image_path_purple):
         st.image(image_path_purple, width=150, use_container_width=False)
-        st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
+        if name_disp:
+            st.subheader(f"Tier : {Tier_of_Deck(target_value)}")
     else:
         st.error(f"画像ファイルが見つかりません")
 
@@ -1096,7 +1102,25 @@ def player_set():
     # データフレームの表示
     st.dataframe(st.session_state.player_df['名前'])
 
-    # PLAYERを追加する機能の追加
+    st.write("_____________________________________________________________")
+    if st.button("プレイヤー追加"):
+        st.session_state.page_id = "プレイヤー追加"
+        st.session_state.page_id_flag = False
+        st.rerun()
+
+    if st.button("プレイヤーDF ダウンロード&アップロード"):
+        st.session_state.page_id = "プレイヤーU&D"
+        st.session_state.page_id_flag = False
+        st.rerun()
+
+
+    ############################ プレイヤー追加画面 ##################################### 
+def player_add():
+    st.title("プレイヤー追加")
+    
+    st.subheader("プレイヤー一覧")
+    st.dataframe(st.session_state.player_df['名前'])
+
     # 入力フォーム
     new_name = st.text_input("追加したい名前を入力してください")
 
@@ -1132,7 +1156,135 @@ def player_set():
         preview_df = pd.read_csv("player/new_player_list.csv")
         st.dataframe(preview_df['名前'])
     else:
-        st.dataframe(st.session_state.player_df['名前'])    
+        st.dataframe(st.session_state.player_df['名前'])  
+
+    st.write("_____________________________________________________________")
+    if st.button("戻る"):
+        st.session_state.page_id = "プレイヤー設定"
+        st.session_state.page_id_flag = True
+        st.rerun()
+
+    ############################ プレイヤーdf ダウンロード & アップロード画面 #####################################  
+def player_UD():
+    st.title("プレイヤーDF　ダウンロード & アップロード")
+
+    st.write("_____________________________________________________________")
+    st.subheader("現在のプレイヤーDFをダウンロード")
+    # ファイル名をユーザーに入力してもらう
+    file_name_input = st.text_input("保存するCSVファイル名を入力してください")
+    if file_name_input != "":
+        download_dataframe_as_csv(file_name_input, st.session_state.player_df)
+
+    st.write("_____________________________________________________________")
+    st.subheader("プレイヤーDFをアップロード")
+    player_df_csv = st.file_uploader("CSVファイル_１をアップロードしてください", type="csv")
+    if player_df_csv:
+        try:
+            player_df_temp = pd.read_csv(player_df_csv)
+            st.session_state.player_df = player_df_temp
+            st.success("プレイヤーファイルを読み込みました!")
+        except Exception as e:
+            st.error(f"ファイル1の読み込みエラー: {e}")
+    else:
+        st.info("CSVファイルをアップロードしてください。")
+
+
+    st.write("_____________________________________________________________")
+    if st.button("戻る"):
+        st.session_state.page_id = "プレイヤー設定"
+        st.session_state.page_id_flag = True
+        st.rerun()
+
+# Tier表確認
+def Tier_list_check_ALL():
+    st.title("Tier表")
+
+    if "create_df_temp2" not in st.session_state:
+        columns = ["🔴赤", "🔵青", "🟡黄", "🟢緑", "🟣紫"]
+        create_df_temp2 = pd.DataFrame(columns=columns)
+        # 赤のpngファイル名を全て抽出
+        png_files1 = list_png_files("image/赤")
+        for file1 in png_files1:
+            target_value1 = file1.replace(".png", "")
+            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🔴赤",target_value1)
+
+        # 青のpngファイル名を全て抽出
+        png_files2 = list_png_files("image/青")
+        for file2 in png_files2:
+            target_value2 = file2.replace(".png", "")
+            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🔵青",target_value2)
+
+        # 緑のpngファイル名を全て抽出
+        png_files3 = list_png_files("image/緑")
+        for file3 in png_files3:
+            target_value3 = file3.replace(".png", "")
+            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟢緑",target_value3)
+
+        # 黄のpngファイル名を全て抽出
+        png_files4 = list_png_files("image/黄")
+        for file4 in png_files4:
+            target_value4 = file4.replace(".png", "")
+            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟡黄",target_value4)
+
+        # 紫のpngファイル名を全て抽出
+        png_files5 = list_png_files("image/紫")
+        for file5 in png_files5:
+            target_value5 = file5.replace(".png", "")
+            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟣紫",target_value5)
+
+        # 保存 & 表示
+        st.session_state.create_df_temp2 = sort_df(create_df_temp2)
+
+    # Tier別dfを作成
+    if "Tier_df" not in st.session_state:
+        st.session_state.Tier_df = df_to_tier_df(st.session_state.create_df_temp2)
+
+    if "Tier_df" in st.session_state and not st.session_state.Tier_df.empty:
+        # 列名を取得してセレクトボックスで表示
+        unique_titles = extract_unique_titles(st.session_state.Tier_df)
+        unique_titles.append("ALL")
+        st.write("抽出された作品名一覧（あいうえお順）:")
+
+        selected_title = st.selectbox("タイトル選択", unique_titles,index=unique_titles.index("ALL"))
+
+        results = extract_elements_by_title(st.session_state.Tier_df, selected_title)
+        
+        # 選択された列名を表示（任意）
+        st.write(f"選択されたタイトル: {selected_title}")
+
+        if selected_title == "ALL":
+            st.session_state.Tier_df_temp = st.session_state.Tier_df
+        else:
+            st.session_state.Tier_df_temp = st.session_state.Tier_df[st.session_state.Tier_df.isin(results)]
+        
+    else:
+        st.warning("データフレームが存在しないか空です。")
+
+    # DataFrameが st.session_state に存在するか確認
+    if "Tier_df_temp" in st.session_state and not st.session_state.Tier_df_temp.empty:
+        tier_list = ["Tier1.0", "Tier1.5", "Tier2.0", "Tier2.5", "Tier3.0", "Tier4.0", "Tier5.0"]
+
+
+        for selected_column in tier_list:
+            st.subheader(f"{selected_column}")
+
+            df = st.session_state.Tier_df_temp
+            # NaNを除いて値を取得し、.pngを付与
+            image_names = df[selected_column].dropna().astype(str).tolist()
+            image_names = [name + ".png" if not name.endswith(".png") else name for name in image_names]
+            if image_names == []:
+                st.info("該当条件を満たすデッキはありません")
+
+            n = 10
+            # 画像を3つずつ横並びで表示
+            for i in range(0, len(image_names), n):
+                cols = st.columns(n)
+                for j, image_name in enumerate(image_names[i:i+n]):
+                    with cols[j]:
+                        output_image(df, image_name, False)
+
+    else:
+        st.warning("データフレームが存在しないか空です。")
 
 ##############################################################################################
 
@@ -1140,8 +1292,6 @@ def debag():
     st.title("デバッグページ")
 
  
-
-
 ##############################################################################################
 
 
@@ -1152,7 +1302,7 @@ def main():
     normalize_image_filenames()
 
     # page_id_list = ["データベース選択","ランダム抽出","Deck_Customize","プレイヤー情報","プレイヤー設定","デバッグページ"]
-    page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","プレイヤー情報","プレイヤー設定"]
+    page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","プレイヤー情報","プレイヤー設定","Tier_list_check_ALL"]
 
     if "page_id" not in st.session_state:
         st.session_state.page_id = "ホーム画面"
@@ -1161,16 +1311,16 @@ def main():
         page_id = st.sidebar.selectbox("ページ選択", page_id_list)
         st.session_state.page_id = page_id
 
-        # # 保存ボタンでセッションとCSVに反映
-        # if st.sidebar.button("プレイヤー一覧を保存",key=f"save_button_1"):
-        #     try:
-        #         # 一時ファイルがあれば読み込んで session_state に反映
-        #         temp_df = pd.read_csv("player/new_player_list.csv")
-        #         st.session_state.player_df = temp_df
-        #         save_csv()
-        #         st.sidebar.success("プレイヤー一覧を保存しました！")
-        #     except FileNotFoundError:
-        #         st.sidebar.error("保存前に名前を追加してください。")
+        # 保存ボタンでセッションとCSVに反映
+        if st.sidebar.button("プレイヤー一覧を保存",key=f"save_button_1"):
+            try:
+                # 一時ファイルがあれば読み込んで session_state に反映
+                temp_df = pd.read_csv("player/new_player_list.csv")
+                st.session_state.player_df = temp_df
+                save_csv()
+                st.sidebar.success("プレイヤー一覧を保存しました！")
+            except FileNotFoundError:
+                st.sidebar.error("保存前に名前を追加してください。")
 
         # if st.sidebar.button("プレイヤー一覧を初期化(デバック用)"):
         #     try:
@@ -1219,6 +1369,15 @@ def main():
 
     if st.session_state.page_id == "プレイヤー設定":
         player_set()
+
+    if st.session_state.page_id == "プレイヤー追加":
+        player_add()
+
+    if st.session_state.page_id == "プレイヤーU&D":
+        player_UD()
+
+    if st.session_state.page_id == "Tier_list_check_ALL":
+        Tier_list_check_ALL()
 
     if st.session_state.page_id == "デバッグページ":
         debag()
