@@ -1071,7 +1071,7 @@ def player_info():
                             tier_sum += Tier_of_Deck(deck_name)
                             # 画像を出力
                             output_image(st.session_state.df, image_name)
-                            if st.button("このデッキを削除",key=f"player_{i}_deck_{j}"):
+                            if st.button("このデッキを削除",key=f"player_{i}_deck_{k + j}"):
                                 remove_image_name(selected_player, image_name)
                 # my_deck_listのtierの平均を計算
                 tier_avg = tier_sum / len(image_list)
