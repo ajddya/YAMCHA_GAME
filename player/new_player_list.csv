@@ -1,4 +1,3 @@
-名前,image_names
-PLAYER_1,"['シャニマス(ストレイライト).png', 'SAO(歌).png', 'ガメラ(陸ガメラ).png']"
-PLAYER_2,
-PLAYER_3,
+名前,image_names,deck_order
+PLAYER_1,"['SHY(ヒーロー).png', 'ハガレン(ブリッグズ).png', 'ロボコ(バミュ4).png', 'アークナイツ(フロストノヴァ).png', '転すら(ディアブロ).png']",{}
+PLAYER_2,"['学マス(生徒会).png', 'シャニマス(ストレイライト).png', 'ヒロアカ(ミリオ).png', 'ヒロアカ(死穢八斎會).png', 'SAO(プログレッシブ).png']",
