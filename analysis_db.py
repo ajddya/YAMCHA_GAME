@@ -9,6 +9,7 @@ import math
 import unicodedata
 import re
 import uuid
+# import numpy as np
 
 button_css1 = f"""
     <style>
@@ -64,6 +65,52 @@ def init():
 
     if "player_num_default" not in st.session_state:
         st.session_state.player_num_default = 1
+
+    if "create_df_temp2" not in st.session_state:
+        columns = ["🔴赤", "🔵青", "🟡黄", "🟢緑", "🟣紫"]
+        create_df_temp2 = pd.DataFrame(columns=columns)
+        # 赤のpngファイル名を全て抽出
+        png_files1 = list_png_files("image/赤")
+        for file1 in png_files1:
+            target_value1 = file1.replace(".png", "")
+            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🔴赤",target_value1)
+
+        # 青のpngファイル名を全て抽出
+        png_files2 = list_png_files("image/青")
+        for file2 in png_files2:
+            target_value2 = file2.replace(".png", "")
+            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🔵青",target_value2)
+
+        # 緑のpngファイル名を全て抽出
+        png_files3 = list_png_files("image/緑")
+        for file3 in png_files3:
+            target_value3 = file3.replace(".png", "")
+            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟢緑",target_value3)
+
+        # 黄のpngファイル名を全て抽出
+        png_files4 = list_png_files("image/黄")
+        for file4 in png_files4:
+            target_value4 = file4.replace(".png", "")
+            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟡黄",target_value4)
+
+        # 紫のpngファイル名を全て抽出
+        png_files5 = list_png_files("image/紫")
+        for file5 in png_files5:
+            target_value5 = file5.replace(".png", "")
+            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟣紫",target_value5)
+
+        # 保存 & 表示
+        st.session_state.create_df_temp2 = sort_df(create_df_temp2)
+
+    # Tier別dfを作成
+    if "Tier_df" not in st.session_state:
+        st.session_state.Tier_df = df_to_tier_df(st.session_state.create_df_temp2)
+
+    # if "q2" not in st.session_state:
+    #     st.session_state.q1, st.session_state.q2, st.session_state.q3 = get_tier_quantiles(st.session_state.Tier_df)
+
+    if "avg_tier" not in st.session_state:
+        st.session_state.avg_tier = calculate_average_tier(st.session_state.Tier_df)
 
 
 # 文字コードを正規化
@@ -208,7 +255,58 @@ def df_to_tier_df(df):
     tier_df = sort_df(tier_df, tier_list)
 
     return tier_df
+# 各Tierの数と四分位数を計算
+def get_tier_quantiles(df):
+    tier_values = []
 
+    # df のすべての値に対して Tier を取得してリスト化
+    for col in df.columns:
+        for val in df[col]:
+            if pd.notna(val):
+                try:
+                    tier = Tier_of_Deck(val)
+                    tier_values.append(tier)
+                except Exception as e:
+                    st.warning(f"{val} の Tier 判定中にエラー: {e}")
+
+    if not tier_values:
+        st.error("Tier 値が見つかりませんでした。")
+        return None
+
+    # 四分位数の計算
+    tier_array = np.array(tier_values)
+    q1 = np.quantile(tier_array, 0.25)
+    q2 = np.quantile(tier_array, 0.5)  # 中央
+    q3 = np.quantile(tier_array, 0.75)
+
+    return q1, q2, q3
+# 全デッキから平均Tierを計算
+def calculate_average_tier(tier_df):
+    # Tier名と対応する数値
+    tier_weights = {
+        "Tier1.0": 1.0,
+        "Tier1.5": 1.5,
+        "Tier2.0": 2.0,
+        "Tier2.5": 2.5,
+        "Tier3.0": 3.0,
+        "Tier4.0": 4.0,
+        "Tier5.0": 5.0
+    }
+
+    total_tier = 0
+    total_count = 0
+
+    for tier, weight in tier_weights.items():
+        if tier in tier_df.columns:
+            count = tier_df[tier].count()
+            total_tier += weight * count
+            total_count += count
+
+    if total_count == 0:
+        return None  # デッキが登録されていない場合
+    else:
+        avg_tier = total_tier / total_count
+        return round(avg_tier, 2)
 # dfからランダムに1要素を抽出
 def get_random(df):
     # ランダムに1つのセル（要素）を取得（値がNoneでないもの）
@@ -533,6 +631,10 @@ def home_screen():
         st.session_state.page_id = "データベース選択"
         st.rerun()
 
+    if st.button("クイックスタート"):
+        st.session_state.page_id = "クイックスタート"
+        st.rerun()
+
 def csv_app():
     st.title('ファイル選択')
 
@@ -754,47 +856,6 @@ def create_csv_3_1():
             st.rerun()
     st.sidebar.write("______________________________________")
     
-    ##################### subheader #####################
-
-    if "create_df_temp2" not in st.session_state:
-        columns = ["🔴赤", "🔵青", "🟡黄", "🟢緑", "🟣紫"]
-        create_df_temp2 = pd.DataFrame(columns=columns)
-        # 赤のpngファイル名を全て抽出
-        png_files1 = list_png_files("image/赤")
-        for file1 in png_files1:
-            target_value1 = file1.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🔴赤",target_value1)
-
-        # 青のpngファイル名を全て抽出
-        png_files2 = list_png_files("image/青")
-        for file2 in png_files2:
-            target_value2 = file2.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🔵青",target_value2)
-
-        # 緑のpngファイル名を全て抽出
-        png_files3 = list_png_files("image/緑")
-        for file3 in png_files3:
-            target_value3 = file3.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟢緑",target_value3)
-
-        # 黄のpngファイル名を全て抽出
-        png_files4 = list_png_files("image/黄")
-        for file4 in png_files4:
-            target_value4 = file4.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟡黄",target_value4)
-
-        # 紫のpngファイル名を全て抽出
-        png_files5 = list_png_files("image/紫")
-        for file5 in png_files5:
-            target_value5 = file5.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟣紫",target_value5)
-
-        # 保存 & 表示
-        st.session_state.create_df_temp2 = sort_df(create_df_temp2)
-
-    # Tier別dfを作成
-    st.session_state.Tier_df = df_to_tier_df(st.session_state.create_df_temp2)
-
     select_method = st.radio("一覧表示方式を選択してください", ["色別", "タイトル別", "Tier別"], horizontal=True)
 
     if select_method == "色別":
@@ -930,16 +991,17 @@ def random_app():
                     avg_tier_temp = avg_tier
 
                 if st.session_state.uniform_role_flag and avg_tier_temp is not None:
+                    p = st.session_state.avg_tier
                     while True:
                         random_value = get_random(st.session_state.df)
                         # 重複してたらもう一度実行する
                         if random_value not in deck_list_temp:
                             deck_tier = Tier_of_Deck(random_value)
-                            if avg_tier_temp < 2.7:
-                                if deck_tier > 2.7:
+                            if avg_tier_temp < p:
+                                if deck_tier > p:
                                     break
                             else:
-                                if deck_tier < 2.7:
+                                if deck_tier < p:
                                     break
                 else:
                     while True:
@@ -1089,7 +1151,7 @@ def duel_standby():
                         cols = st.columns(n)  # 3つの列を作成
                         for j, image_name in enumerate(image_list[k:k+n]):
                             with cols[j]:
-                                output_image(st.session_state.df, image_name, False)
+                                output_image(st.session_state.create_df_temp2, image_name, False)
                 else:
                     st.write("デッキが登録されていません")
             except Exception as e:
@@ -1137,7 +1199,7 @@ def duel_standby():
                     col1, col2 = st.columns([1, 3])
 
                     with col1:
-                        output_image(st.session_state.df, image, False)
+                        output_image(st.session_state.create_df_temp2, image, False)
 
                     with col2:
                         deck = image.replace(".png", "")
@@ -1260,7 +1322,7 @@ def duel_start():
                 # 使用順でソート
                 ordered_decks = sorted(deck_order.items(), key=lambda x: x[1])
 
-                output_image(st.session_state.df, ordered_decks[i-1][0], False) 
+                output_image(st.session_state.create_df_temp2, ordered_decks[i-1][0]) 
 
 
             with colum2:
@@ -1283,8 +1345,7 @@ def duel_start():
                 # 使用順でソート
                 ordered_decks2 = sorted(deck_order2.items(), key=lambda x: x[1])
 
-                for deck_name, order in ordered_decks2:
-                    output_image(st.session_state.df, deck_name, False) 
+                output_image(st.session_state.create_df_temp2, ordered_decks2[i-1][0]) 
 
 
 
@@ -1350,7 +1411,7 @@ def player_info():
                             deck_name = image_name.replace(".png", "")
                             tier_sum += Tier_of_Deck(deck_name)
                             # 画像を出力
-                            output_image(st.session_state.df, image_name)
+                            output_image(st.session_state.create_df_temp2, image_name)
                             if st.button("このデッキを削除",key=f"player_{i}_deck_{k + j}"):
                                 remove_image_name(selected_player, image_name)
                 # my_deck_listのtierの平均を計算
@@ -1480,46 +1541,6 @@ def player_UD():
 def Tier_list_check_ALL():
     st.title("Tier表")
 
-    if "create_df_temp2" not in st.session_state:
-        columns = ["🔴赤", "🔵青", "🟡黄", "🟢緑", "🟣紫"]
-        create_df_temp2 = pd.DataFrame(columns=columns)
-        # 赤のpngファイル名を全て抽出
-        png_files1 = list_png_files("image/赤")
-        for file1 in png_files1:
-            target_value1 = file1.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🔴赤",target_value1)
-
-        # 青のpngファイル名を全て抽出
-        png_files2 = list_png_files("image/青")
-        for file2 in png_files2:
-            target_value2 = file2.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🔵青",target_value2)
-
-        # 緑のpngファイル名を全て抽出
-        png_files3 = list_png_files("image/緑")
-        for file3 in png_files3:
-            target_value3 = file3.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟢緑",target_value3)
-
-        # 黄のpngファイル名を全て抽出
-        png_files4 = list_png_files("image/黄")
-        for file4 in png_files4:
-            target_value4 = file4.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟡黄",target_value4)
-
-        # 紫のpngファイル名を全て抽出
-        png_files5 = list_png_files("image/紫")
-        for file5 in png_files5:
-            target_value5 = file5.replace(".png", "")
-            create_df_temp2 = save_image_names_to_df(create_df_temp2,"🟣紫",target_value5)
-
-        # 保存 & 表示
-        st.session_state.create_df_temp2 = sort_df(create_df_temp2)
-
-    # Tier別dfを作成
-    if "Tier_df" not in st.session_state:
-        st.session_state.Tier_df = df_to_tier_df(st.session_state.create_df_temp2)
-
     if "Tier_df" in st.session_state and not st.session_state.Tier_df.empty:
         # 列名を取得してセレクトボックスで表示
         unique_titles = extract_unique_titles(st.session_state.Tier_df)
@@ -1567,6 +1588,10 @@ def Tier_list_check_ALL():
     else:
         st.warning("データフレームが存在しないか空です。")
 
+# 簡易版スタート
+def quick_start():
+    st.title("クイックスタート")
+
 ##############################################################################################
 
 def debag():
@@ -1583,7 +1608,7 @@ def main():
     normalize_image_filenames()
 
     # page_id_list = ["データベース選択","ランダム抽出","Deck_Customize","プレイヤー情報","プレイヤー設定","デバッグページ"]
-    page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表"]
+    page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート"]
 
     if "page_id" not in st.session_state:
         st.session_state.page_id = "ホーム画面"
@@ -1668,6 +1693,10 @@ def main():
 
     if st.session_state.page_id == "Tier表":
         Tier_list_check_ALL()
+
+    if st.session_state.page_id == "クイックスタート":
+        quick_start()
+
 
     if st.session_state.page_id == "デバッグページ":
         debag()
