@@ -1825,9 +1825,6 @@ def main():
         if chec_box:
             st.sidebar.success("画面が更新されました")
 
-    # 常にPLAYER_DFの状態を更新し続ける
-    st.session_state.player_df = pd.read_csv("player/player.csv")
-
     if st.session_state.page_id == "ホーム画面":
         home_screen()
 
