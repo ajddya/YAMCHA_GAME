@@ -607,7 +607,7 @@ def download_dataframe_as_csv(filename: str, df: pd.DataFrame):
 
         # データをCSV形式にエンコード（バイトIOで）
         buffer = BytesIO()
-        df.to_csv(buffer, index=False)
+        df.to_csv(buffer, index=False, encoding="utf-8-sig")
         buffer.seek(0)
 
         # ダウンロードボタン
@@ -631,12 +631,12 @@ def home_screen():
     image_path = os.path.join("ホーム画面", "ホーム画面.png")
     st.image(image_path)
 
-    if st.button("スタート"):
-        st.session_state.page_id = "データベース選択"
-        st.rerun()
-
     if st.button("クイックスタート"):
         st.session_state.page_id = "クイックスタート"
+        st.rerun()
+
+    if st.button("デュエルスタート"):
+        st.session_state.page_id = "デュエルスタート"
         st.rerun()
 
 def csv_app():
@@ -1286,6 +1286,12 @@ def duel_start():
             index=player_list.index("PLAYER_1"),
             key="PLAYER_1"
         )   
+        player_data1 = st.session_state.player_df[st.session_state.player_df["名前"] == selected_player1]
+        raw_order_data = player_data1["deck_order"].values[0]
+        if raw_order_data == "{}" or pd.isna(raw_order_data):
+            st.write("❎")
+        else:
+            st.write("◯")
 
     with col2:
         selected_player2 = st.selectbox(
@@ -1294,6 +1300,13 @@ def duel_start():
             index=player_list.index("PLAYER_2"),
             key="PLAYER_2"
         )   
+        player_data2 = st.session_state.player_df[st.session_state.player_df["名前"] == selected_player2]
+        raw_order_data2 = player_data2["deck_order"].values[0]
+        if raw_order_data2 == "{}" or pd.isna(raw_order_data2):
+            st.write("❎")
+        else:
+            st.write("◯")
+
 
     # ボタンを押してお互いのプレイヤーのデッキを表示(第n回戦のボタン)
     # 勝のラジオボタンで記録
@@ -1308,12 +1321,6 @@ def duel_start():
     for i in range(1,n+1):
         if st.button(f"第{i}回戦"):
             colum1, colum2, colum3 = st.columns([2, 1, 2])
-
-            player_data1 = st.session_state.player_df[st.session_state.player_df["名前"] == selected_player1]
-            raw_order_data = player_data1["deck_order"].values[0]
-
-            player_data2 = st.session_state.player_df[st.session_state.player_df["名前"] == selected_player2]
-            raw_order_data2 = player_data2["deck_order"].values[0]
 
             if raw_order_data == "{}" or pd.isna(raw_order_data):
                 st.warning(f"{selected_player1}のデッキ使用順が登録されていません")
@@ -1535,7 +1542,7 @@ def player_UD():
 
     st.write("_____________________________________________________________")
     st.subheader("プレイヤーDFをアップロード")
-    player_df_csv = st.file_uploader("CSVファイル_１をアップロードしてください", type="csv")
+    player_df_csv = st.file_uploader("CSVファイルをアップロードしてください", type="csv")
     if player_df_csv:
         try:
             player_df_temp = pd.read_csv(player_df_csv)
@@ -1820,6 +1827,10 @@ def main():
         #         st.sidebar.success("プレイヤー一覧を初期化しました！")
         #     except FileNotFoundError:
         #         st.sidebar.error("ファイルがありません。")
+
+        # ボタンを押すとPLAYER_DFの状態を更新
+        if st.sidebar.button("プレイヤー一覧を読み込み",key=f"load_button_1"):
+            st.session_state.player_df = pd.read_csv("player/player.csv")
 
         chec_box = st.sidebar.checkbox("画面更新用",key="update")
         if chec_box:
