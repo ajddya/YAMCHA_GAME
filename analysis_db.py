@@ -46,9 +46,14 @@ def init():
         columns = ["🔴赤", "🔵青", "🟡黄", "🟢緑", "🟣紫"]
         st.session_state.create_df_temp = pd.DataFrame(columns=columns)
 
-    # 外に出す？　常にplayer_dfを更新し続ける
     if "player_df" not in st.session_state:
         st.session_state.player_df = pd.read_csv("player/player.csv")
+
+    # 対戦記録用のDF
+    if "duel_history_df" not in st.session_state:
+        st.session_state.duel_history_df = pd.DataFrame(columns=[
+            "日付", "PLAYER1", "PLAYER1_デッキ", "PLAYER2", "PLAYER2_デッキ", "勝者", "備考"
+        ])
 
     if "image_name" not in st.session_state:
         st.session_state.image_name = None
@@ -462,6 +467,19 @@ def merge_dfs_with_function(df1, df2):
             merged_df = save_image_names_to_df(merged_df, col, image_name)
 
     return merged_df
+# 対戦を記録
+def record_duel(player1, deck1, player2, deck2, winner, notes=""):
+    new_record = {
+        "日付": datetime.now().strftime("%Y-%m-%d"),
+        "PLAYER1": player1,
+        "PLAYER1_デッキ": deck1,
+        "PLAYER2": player2,
+        "PLAYER2_デッキ": deck2,
+        "勝者": winner,
+        "備考": notes
+    }
+
+    st.session_state.duel_history_df = pd.concat([st.session_state.duel_history_df, pd.DataFrame([new_record])], ignore_index=True)
 
 # 名前から画像を表示する
 def output_image(df, image_name, name_disp=True):
@@ -1116,6 +1134,20 @@ def duel():
         st.session_state.page_id = "デュエルスタート"
         st.session_state.page_id_flag = False
         st.rerun()
+
+    col1, col2, col3 = st.columns([1, 1, 1])
+
+    with col1:
+        st.write(" ")
+    with col2:
+        st.write(" ")
+    with col3:
+        if st.button("対戦成績照会"):
+            st.session_state.page_id = "対戦成績照会"
+            st.session_state.page_id_flag = False
+            st.rerun()
+
+
 # デッキ使用順の設定
 def duel_standby():
     st.title("デュエルスタンバイ")
@@ -1262,13 +1294,13 @@ def duel_standby():
         st.session_state.page_id = "デュエル"
         st.session_state.page_id_flag = True
         st.rerun()
-
+# デュエルスタート
 def duel_start():
     st.title("デュエルスタート")
 
     ##############################################################################################
     # 3on3か5on5を選択(デフォルトは5on5)
-    select_vs = st.radio("バトル方式を選択してください", ["5 on 5", "3 on 3"], horizontal=True)
+    select_vs = st.radio("バトル方式を選択してください", ["5 on 5", "3 on 3"], horizontal=True, key="battle_mode_radio")
     if select_vs == "3 on 3":
         n = 3
     elif select_vs == "5 on 5":
@@ -1318,10 +1350,23 @@ def duel_start():
     with c2:
         st.subheader(selected_player2)
 
-    for i in range(1,n+1):
-        if st.button(f"第{i}回戦"):
-            colum1, colum2, colum3 = st.columns([2, 1, 2])
+    if "winner" not in st.session_state:
+        st.session_state.winner = [None]*5    
+    if "results" not in st.session_state:
+        st.session_state.results = []
 
+    for i in range(1, n + 1):
+        match_key = f"match_{i}_shown"
+        if match_key not in st.session_state:
+            st.session_state[match_key] = False
+
+        if not st.session_state[match_key]:
+            if st.button(f"第{i}回戦", key=f"button_match_{i}"):
+                st.session_state[match_key] = True
+                st.rerun()  # 状態変更直後に再描画する
+        else:
+            st.subheader(f"第{i}回戦")
+            colum1, colum2, colum3 = st.columns([2, 1, 2])
             if raw_order_data == "{}" or pd.isna(raw_order_data):
                 st.warning(f"{selected_player1}のデッキ使用順が登録されていません")
             elif raw_order_data2 == "{}" or pd.isna(raw_order_data2):
@@ -1346,6 +1391,7 @@ def duel_start():
 
 
                 with colum2:
+                    st.subheader("")
                     st.subheader("VS")
 
                 with colum3:
@@ -1365,10 +1411,156 @@ def duel_start():
 
                     output_image(st.session_state.create_df_temp2, ordered_decks2[i-1][0]) 
 
+                st.session_state.winner[i-1] = st.radio(f"第{i}回戦 勝者", [selected_player1, selected_player2], horizontal=True, key=f"winner_{i}")
+                
 
+    st.write("_____________________________________________________________")
+    # if "match_results" not in st.session_state:
+    #     st.session_state.match_results = []
+    # まとめて記録ボタン
+    if st.button("結果を登録する"):
+        st.session_state.results = []
+        for i in range(1, n + 1):
+            winner = st.session_state.winner[i-1]
+            if winner is not None:
+                st.session_state.results.append({
+                        "player1": selected_player1,
+                        "deck1": ordered_decks[i-1][0],
+                        "player2": selected_player2,
+                        "deck2": ordered_decks2[i-1][0],
+                        "winner": st.session_state.winner[i-1]
+                    })
 
+            
+        # st.session_state.match_results.extend(st.session_state.results)
+        st.success("結果を登録しました。")
+        # st.dataframe(pd.DataFrame(st.session_state.match_results))
+        results_df = pd.DataFrame(st.session_state.results)
+        st.dataframe(results_df)
+        # 今日の日付を取得
+        today = date.today()
+
+        # 文字列に変換（例：2025-06-04）
+        date_str = today.strftime("%Y-%m-%d")
+
+        file_name_input = "GRADES_DF_" + date_str
+
+        if file_name_input != "":
+            download_dataframe_as_csv(file_name_input, results_df)
     
     ##############################################################################################
+    st.write("_____________________________________________________________")
+    if st.button("戻る"):
+        st.session_state.page_id = "デュエル"
+        st.session_state.page_id_flag = True
+        st.rerun()
+# 対戦成績
+def duel_grades():
+    st.title("対戦成績照会")
+
+    if st.button("成績ファイル結合"):
+        st.session_state.page_id = "成績ファイル結合"
+        st.rerun()
+
+    st.write("_____________________________________________________________")
+    uploaded_file = st.file_uploader("CSVファイルをアップロードしてください", type="csv")
+    # プレイヤー選択
+    selected_player = st.selectbox(
+        label="プレイヤーを選択してください",
+        options=st.session_state.player_df["名前"],
+        key="player"
+    )
+    # 表示件数選択
+    output_num_list = [10,20,30,50]
+    selected_output_num = st.selectbox("表示件数",output_num_list)
+
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+
+        # 該当プレイヤーが player1 または player2 に含まれる行を抽出
+        filtered_df = df[(df["player1"] == selected_player) | (df["player2"] == selected_player)]
+
+        # 表示件数分だけ表示
+        st.write(f"🔍 {selected_player} の対戦記録（最大 {selected_output_num} 件表示）")
+        st.session_state.select_output_style = st.radio("表示形式の選択",["データフレーム","画像"], horizontal=True)
+        if st.session_state.select_output_style == "データフレーム":
+            st.dataframe(filtered_df.tail(selected_output_num))
+        if st.session_state.select_output_style == "画像":
+            st.write("現在準備中")
+        #############################################################################
+        # PLAYER1のデッキ | PLAYER2のデッキ | 勝敗
+        # .....
+        # PLAYER1の勝ち数 | PLAYER2の勝ち数
+        #############################################################################
+
+        # 勝敗を集計
+        win_counts = {}
+        for _, row in filtered_df.iterrows():
+            opponent = row["player2"] if row["player1"] == selected_player else row["player1"]
+            is_win = (row["winner"] == selected_player)
+
+            if opponent not in win_counts:
+                win_counts[opponent] = {"自分の勝ち": 0, "相手の勝ち": 0}
+
+            if is_win:
+                win_counts[opponent]["自分の勝ち"] += 1
+            else:
+                win_counts[opponent]["相手の勝ち"] += 1
+
+        # 集計結果をデータフレームにして表示
+        summary_df = pd.DataFrame([
+            {"対戦相手": opponent, **result}
+            for opponent, result in win_counts.items()
+        ])
+
+        st.write(f"📊 {selected_player} の対戦相手ごとの勝敗数")
+        for player in summary_df["対戦相手"]:
+            my_win_num = summary_df[summary_df["対戦相手"]==player]["自分の勝ち"].values[0]
+            opponent_win_num = summary_df[summary_df["対戦相手"]==player]["相手の勝ち"].values[0]
+            st.header(f"{selected_player} ー {player} 　:　 {my_win_num}　ー　{opponent_win_num}")
+        # st.dataframe(summary_df)
+
+    else:
+        st.info("CSVファイルをアップロードしてください。")
+
+
+    st.write("_____________________________________________________________")
+    if st.button("戻る"):
+        st.session_state.page_id = "デュエル"
+        st.session_state.page_id_flag = True
+        st.rerun()
+# 成績の結合
+def combine_grades():
+    st.title("成績ファイル結合")
+    uploaded_files = st.file_uploader("CSVファイルを複数選択", type="csv", accept_multiple_files=True)
+    
+    if uploaded_files:
+        all_dfs = []
+        for file in uploaded_files:
+            try:
+                df = pd.read_csv(file)
+                all_dfs.append(df)
+            except Exception as e:
+                st.error(f"{file.name} の読み込みに失敗しました: {e}")
+
+        if all_dfs:
+            combined_df = pd.concat(all_dfs, ignore_index=True)
+            st.success(f"{len(all_dfs)} 件のファイルを結合しました。")
+            st.dataframe(combined_df)
+
+            # 今日の日付を取得
+            today = date.today()
+
+            # 文字列に変換（例：2025-06-04）
+            date_str = today.strftime("%Y-%m-%d")
+
+            file_name_input = "COMBINE_GRADES_DF_" + date_str
+
+            if file_name_input != "":
+                download_dataframe_as_csv(file_name_input, combined_df)
+            
+            st.write("ダウンロード後、結合前ファイルの削除を推奨")
+
     st.write("_____________________________________________________________")
     if st.button("戻る"):
         st.session_state.page_id = "デュエル"
@@ -1479,22 +1671,37 @@ def player_add():
     st.dataframe(st.session_state.player_df['名前'])
 
     # 入力フォーム
-    new_name = st.text_input("追加したい名前を入力してください")
+    new_name = st.text_input("名前を入力してください")
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        # 追加ボタン
+        if st.button("名前を追加"):
+            if new_name.strip() == "":
+                st.warning("空白の名前は追加できません。")
+            elif new_name in st.session_state.player_df["名前"].values:
+                st.warning(f"'{new_name}' はすでにリストに存在します。")
+            else:
+                # 名前を1行のDataFrameにして追加
+                new_row = pd.DataFrame([[new_name]], columns=["名前"])
+                player_df = pd.concat([st.session_state.player_df, new_row], ignore_index=True)
+                # CSVファイルとして保存
+                player_df.to_csv("player/new_player_list.csv", index=False)
 
-    # 追加ボタン
-    if st.button("名前を追加"):
-        if new_name.strip() == "":
-            st.warning("空白の名前は追加できません。")
-        elif new_name in st.session_state.player_df["名前"].values:
-            st.warning(f"'{new_name}' はすでにリストに存在します。")
-        else:
-            # 名前を1行のDataFrameにして追加
-            new_row = pd.DataFrame([[new_name]], columns=["名前"])
-            player_df = pd.concat([st.session_state.player_df, new_row], ignore_index=True)
-            # CSVファイルとして保存
-            player_df.to_csv("player/new_player_list.csv", index=False)
+                st.success(f"{new_name} を追加しました！")
 
-            st.success(f"{new_name} を追加しました！")
+    with col2:
+        if st.button("名前を削除"):
+            if new_name.strip() == "":
+                st.warning("空白の名前は削除できません。")
+            elif new_name not in st.session_state.player_df["名前"].values:
+                st.warning(f"'{new_name}' はリストに存在しません。")
+            else:
+                # 名前を1行のDataFrameにして追加
+                player_df = st.session_state.player_df[st.session_state.player_df['名前'] != new_name]
+                # CSVファイルとして保存
+                player_df.to_csv("player/new_player_list.csv", index=False)
+
+                st.success(f"{new_name} を削除しました！")
 
     # 保存ボタンでセッションとCSVに反映
     if st.button("プレイヤー一覧を保存"):
@@ -1614,6 +1821,7 @@ def Tier_list_check_ALL():
 
 # 簡易版スタート
 def quick_start():
+    st.subheader("デッキリスト選択")
     selected_csv_path = select_csv_from_list_folder()
     if selected_csv_path:
         df = pd.read_csv(selected_csv_path)
@@ -1644,6 +1852,7 @@ def quick_start():
 
     st.write("_____________________________________________________________")
     # PLAYER選択
+    st.subheader("PLAYER選択")
     player_list = list(st.session_state.player_df["名前"])
     player_list.append("（なし）")
 
@@ -1657,6 +1866,7 @@ def quick_start():
     st.write("_____________________________________________________________")
     # ランダム抽出
     if not selected_player == "（なし）":
+        st.subheader("ランダム抽出")
         # 均一ルールをオンにチェックボックス
         st.session_state.uniform_role_flag = st.checkbox("均一ルール")
         # ランダムで出力するデッキ数を選択
@@ -1748,38 +1958,31 @@ def quick_start():
         except IndexError:
             st.warning("プレイヤーデータが見つかりません。")
 
-        # image_names をリストに変換（文字列の場合）
-        try:
-            image_list = ast.literal_eval(image_names_raw) if isinstance(image_names_raw, str) else image_names_raw
-            if isinstance(image_list, list) and len(image_list) > 0:
-                st.write("_____________________________________________________________")
-                st.subheader(f"{selected_player}のデッキリスト")
-                tier_sum = 0
-                for k in range(0, len(image_list), 3):
-                    cols = st.columns(3)  # 3つの列を作成
-                    for j, image_name in enumerate(image_list[k:k+3]):
-                        with cols[j]:
-                            # Tierを合計する
-                            deck_name = image_name.replace(".png", "")
-                            tier_sum += Tier_of_Deck(deck_name)
-                            # 画像を出力
-                            output_image(st.session_state.create_df_temp2, image_name)
-                            if st.button("このデッキを削除",key=f"player_{i}_deck_{k + j}"):
-                                remove_image_name(selected_player, image_name)
-                # my_deck_listのtierの平均を計算
-                tier_avg = tier_sum / len(image_list)
-                truncated_tier_avg = math.floor(tier_avg  * 100) / 100      # 小数点2位以下切り捨て
-                st.header(f"Tierの合計：{tier_sum},　　Tierの平均：{truncated_tier_avg}")
-                
-                st.write("_____________________________________________________________")
-                st.header("デッキ使用順の設定")
-                if st.button("デュエルスタンバイ"):
-                    st.session_state.page_id = "デュエルスタンバイ"
-                    st.session_state.page_id_flag = False
-                    st.rerun()
-
-        except Exception as e:
-            st.error(f"画像リストの解析に失敗しました: {e}")
+        image_list = ast.literal_eval(image_names_raw) if isinstance(image_names_raw, str) else image_names_raw
+        if isinstance(image_list, list) and len(image_list) > 0:
+            st.write("_____________________________________________________________")
+            st.subheader(f"{selected_player}のデッキリスト")
+            tier_sum = 0
+            for k in range(0, len(image_list), 3):
+                cols = st.columns(3)  # 3つの列を作成
+                for j, image_name in enumerate(image_list[k:k+3]):
+                    with cols[j]:
+                        # Tierを合計する
+                        deck_name = image_name.replace(".png", "")
+                        tier_sum += Tier_of_Deck(deck_name)
+                        # 画像を出力
+                        output_image(st.session_state.create_df_temp2, image_name)
+            # my_deck_listのtierの平均を計算
+            tier_avg = tier_sum / len(image_list)
+            truncated_tier_avg = math.floor(tier_avg  * 100) / 100      # 小数点2位以下切り捨て
+            st.header(f"Tierの合計：{tier_sum},　　Tierの平均：{truncated_tier_avg}")
+            
+            st.write("_____________________________________________________________")
+            st.header("デッキ使用順の設定")
+            if st.button("デュエルスタンバイ"):
+                st.session_state.page_id = "デュエルスタンバイ"
+                st.session_state.page_id_flag = False
+                st.rerun()
 
 ##############################################################################################
 
@@ -1807,7 +2010,7 @@ def main():
         st.session_state.page_id = page_id
 
         # 保存ボタンでセッションとCSVに反映
-        if st.sidebar.button("プレイヤー一覧を保存",key=f"save_button_1"):
+        if st.sidebar.button("プレイヤーDFを保存",key=f"save_button_1"):
             try:
                 # 一時ファイルがあれば読み込んで session_state に反映
                 temp_df = pd.read_csv("player/new_player_list.csv")
@@ -1871,6 +2074,12 @@ def main():
 
     if st.session_state.page_id == "デュエルスタート":
         duel_start()
+
+    if st.session_state.page_id == "対戦成績照会":
+        duel_grades()
+
+    if st.session_state.page_id == "成績ファイル結合":
+        combine_grades()
 
     if st.session_state.page_id == "プレイヤー情報":
         player_info()
