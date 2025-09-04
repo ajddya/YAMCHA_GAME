@@ -2003,7 +2003,7 @@ def debag():
 
     # JSONファイルを使って認証
     creds = service_account.Credentials.from_service_account_file(
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"], scopes=SCOPES
+    "service-account.json", scopes=SCOPES
 )
 
     service = build("drive", "v3", credentials=creds)
