@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import random
 import os
-from io import BytesIO
+# from io import BytesIO
 import shutil
 import ast
 import math
@@ -10,7 +10,12 @@ import unicodedata
 import re
 import uuid
 from datetime import date
-# import numpy as np
+
+import json
+import io
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
 button_css1 = f"""
     <style>
@@ -48,12 +53,6 @@ def init():
 
     if "player_df" not in st.session_state:
         st.session_state.player_df = pd.read_csv("player/player.csv")
-
-    # 対戦記録用のDF
-    if "duel_history_df" not in st.session_state:
-        st.session_state.duel_history_df = pd.DataFrame(columns=[
-            "日付", "PLAYER1", "PLAYER1_デッキ", "PLAYER2", "PLAYER2_デッキ", "勝者", "備考"
-        ])
 
     if "image_name" not in st.session_state:
         st.session_state.image_name = None
@@ -326,7 +325,7 @@ def get_random(df):
         
     return random_value
 
-# new_player_list を player にコピーする
+# new_player_list を player にコピーする　(GitHubリポジトリで使用する場合)
 def save_csv():
     # 新しいデータベースファイルのパス
     new_csv_path = 'player/new_player_list.csv'
@@ -341,6 +340,12 @@ def save_csv():
 
     else:
         st.sidebar.write("データの保存に失敗しました。")
+
+# GoogleDriveでデータを保存する場合
+# def save_csv(df, file_id):
+#     df.to_csv("temp.csv", index=False)
+#     media = MediaFileUpload("temp.csv", mimetype="text/csv", resumable=True)
+#     service.files().update(fileId=file_id, media_body=media).execute()
 
 # デッキ名からTierを出力する
 def Tier_of_Deck(deck_name):
@@ -467,19 +472,6 @@ def merge_dfs_with_function(df1, df2):
             merged_df = save_image_names_to_df(merged_df, col, image_name)
 
     return merged_df
-# 対戦を記録
-def record_duel(player1, deck1, player2, deck2, winner, notes=""):
-    new_record = {
-        "日付": datetime.now().strftime("%Y-%m-%d"),
-        "PLAYER1": player1,
-        "PLAYER1_デッキ": deck1,
-        "PLAYER2": player2,
-        "PLAYER2_デッキ": deck2,
-        "勝者": winner,
-        "備考": notes
-    }
-
-    st.session_state.duel_history_df = pd.concat([st.session_state.duel_history_df, pd.DataFrame([new_record])], ignore_index=True)
 
 # 名前から画像を表示する
 def output_image(df, image_name, name_disp=True):
@@ -973,6 +965,8 @@ def random_app():
 
         # 均一ルールをオンにチェックボックス
         st.session_state.uniform_role_flag = st.checkbox("均一ルール")
+        if st.session_state.uniform_role_flag:
+            st.session_state.select_output_style = st.radio("均一の基準にする数値",["全デッキの平均Tier","2.0","3.0","4.0"], horizontal=True)
         # ランダムで出力するデッキ数を選択
         random_deck_num = st.slider("出力するデッキ数", 1, 10, st.session_state.output_deck_num_default)
         # スライダーのデフォルトを設定
@@ -1146,8 +1140,6 @@ def duel():
             st.session_state.page_id = "対戦成績照会"
             st.session_state.page_id_flag = False
             st.rerun()
-
-
 # デッキ使用順の設定
 def duel_standby():
     st.title("デュエルスタンバイ")
@@ -1487,11 +1479,11 @@ def duel_grades():
             st.dataframe(filtered_df.tail(selected_output_num))
         if st.session_state.select_output_style == "画像":
             st.write("現在準備中")
-        #############################################################################
-        # PLAYER1のデッキ | PLAYER2のデッキ | 勝敗
-        # .....
-        # PLAYER1の勝ち数 | PLAYER2の勝ち数
-        #############################################################################
+            #############################################################################
+            # PLAYER1のデッキ | PLAYER2のデッキ | 勝敗
+            # .....
+            # PLAYER1の勝ち数 | PLAYER2の勝ち数
+            #############################################################################
 
         # 勝敗を集計
         win_counts = {}
@@ -1626,6 +1618,16 @@ def player_info():
                 tier_avg = tier_sum / len(image_list)
                 truncated_tier_avg = math.floor(tier_avg  * 100) / 100      # 小数点2位以下切り捨て
                 st.header(f"Tierの合計：{tier_sum},　　Tierの平均：{truncated_tier_avg}")
+                if st.button(f"{selected_player}のデッキリストをリセット",key=f"player_{i}_deck_list"):
+                        # プレイヤーの該当行のインデックスを取得
+                    idx = st.session_state.player_df[st.session_state.player_df["名前"] == selected_player].index
+
+                    if not idx.empty:
+                        st.session_state.player_df.at[idx[0], "image_names"] = None
+                        st.session_state.player_df.at[idx[0], "deck_order"] = None
+                        st.success(f"{selected_player}のデッキリストをリセットしました")
+                        st.session_state.player_df.to_csv("player/new_player_list.csv", index=False)
+                        st.rerun()
             else:
                 st.write("デッキが登録されていません")
         except Exception as e:
@@ -1989,6 +1991,59 @@ def quick_start():
 def debag():
     st.title("デバッグページ")
 
+    # Secret から JSON を取得
+    json_str = st.secrets["GCP_SERVICE_ACCOUNT_JSON"]
+
+    # 一時ファイルとして保存
+    with open("service-account.json", "w") as f:
+        f.write(json_str)
+
+    # 認証スコープ（DriveとSheetsを両方使えるように）
+    SCOPES = ["https://www.googleapis.com/auth/drive"]
+
+    # JSONファイルを使って認証
+    creds = service_account.Credentials.from_service_account_file(
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"], scopes=SCOPES
+)
+
+    service = build("drive", "v3", credentials=creds)
+
+    # -------------------
+    # 実際の使い方
+    # -------------------
+    FILE_ID = "1sTIqJlXNJuwfjeZDMCVMrzvRA5FkBKHZ"
+
+    # -------------------
+    # CSVを読み込む関数
+    # -------------------
+    def load_csv(file_id):
+        request = service.files().get_media(fileId=file_id)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        fh.seek(0)
+        return pd.read_csv(fh)
+
+    # -------------------
+    # CSVを上書き保存する関数
+    # -------------------
+    def save_csv(df, file_id):
+        df.to_csv("temp.csv", index=False)
+        media = MediaFileUpload("temp.csv", mimetype="text/csv", resumable=True)
+        service.files().update(fileId=file_id, media_body=media).execute()
+
+    # -------------------
+    # 使い方
+    # -------------------
+    df = load_csv(FILE_ID)
+    st.write(df.head())
+
+    if st.button("データの上書き保存"):
+        save_csv(st.session_state.player_df, FILE_ID)
+    
+
 ##############################################################################################
 
 
@@ -1998,8 +2053,8 @@ def main():
 
     normalize_image_filenames()
 
-    # page_id_list = ["データベース選択","ランダム抽出","Deck_Customize","プレイヤー情報","プレイヤー設定","デバッグページ"]
-    page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート"]
+    page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート","デバッグページ"]
+    # page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート"]
 
     if "page_id" not in st.session_state:
         st.session_state.page_id = "ホーム画面"
@@ -2019,17 +2074,6 @@ def main():
                 st.sidebar.success("プレイヤー一覧を保存しました！")
             except FileNotFoundError:
                 st.sidebar.error("保存前に名前を追加してください。")
-
-        # if st.sidebar.button("プレイヤー一覧を初期化(デバック用)"):
-        #     try:
-        #         # 一時ファイルがあれば読み込んで session_state に反映
-        #         temp_df = pd.read_csv("player_list.csv")
-        #         st.session_state.player_df = temp_df
-        #         shutil.copyfile("player_list.csv", "player/player_list.csv")
-        #         shutil.copyfile("player_list.csv", "player/new_player_list.csv")
-        #         st.sidebar.success("プレイヤー一覧を初期化しました！")
-        #     except FileNotFoundError:
-        #         st.sidebar.error("ファイルがありません。")
 
         # ボタンを押すとPLAYER_DFの状態を更新
         if st.sidebar.button("プレイヤー一覧を読み込み",key=f"load_button_1"):
