@@ -34,6 +34,25 @@ button_css1 = f"""
 st.markdown(button_css1, unsafe_allow_html=True)
 
 def init():
+    # json認証
+    if "service" not in st.session_state:
+            # Secret から JSON を取得
+        json_str = st.secrets["GCP_SERVICE_ACCOUNT_JSON"]
+
+        # 一時ファイルとして保存
+        with open("service-account.json", "w") as f:
+            f.write(json_str)
+
+        # 認証スコープ（DriveとSheetsを両方使えるように）
+        SCOPES = ["https://www.googleapis.com/auth/drive"]
+
+        # JSONファイルを使って認証
+        creds = service_account.Credentials.from_service_account_file(
+        "service-account.json", scopes=SCOPES
+        )
+
+        st.session_state.service = build("drive", "v3", credentials=creds)  
+
     # sidebarのselectboxのpage_idを有効にするフラグ
     if "page_id_flag" not in st.session_state:
         st.session_state.page_id_flag = True
@@ -52,7 +71,8 @@ def init():
         st.session_state.create_df_temp = pd.DataFrame(columns=columns)
 
     if "player_df" not in st.session_state:
-        st.session_state.player_df = pd.read_csv("player/player.csv")
+        # st.session_state.player_df = pd.read_csv("player/player.csv")
+        st.session_state.player_df = load_csv_from_cloud()
 
     if "image_name" not in st.session_state:
         st.session_state.image_name = None
@@ -342,10 +362,25 @@ def save_csv():
         st.sidebar.write("データの保存に失敗しました。")
 
 # GoogleDriveでデータを保存する場合
-# def save_csv(df, file_id):
-#     df.to_csv("temp.csv", index=False)
-#     media = MediaFileUpload("temp.csv", mimetype="text/csv", resumable=True)
-#     service.files().update(fileId=file_id, media_body=media).execute()
+def save_csv_to_cloud(df):
+    # player.csvのファイルID
+    FILE_ID = "1sTIqJlXNJuwfjeZDMCVMrzvRA5FkBKHZ"
+
+    df.to_csv("temp.csv", index=False)
+    media = MediaFileUpload("temp.csv", mimetype="text/csv", resumable=True)
+    st.session_state.service.files().update(fileId=FILE_ID, media_body=media).execute()
+
+def load_csv_from_cloud():
+    FILE_ID = "1sTIqJlXNJuwfjeZDMCVMrzvRA5FkBKHZ"
+
+    request = st.session_state.service.files().get_media(fileId=FILE_ID)
+    fh = io.BytesIO()
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while not done:
+        status, done = downloader.next_chunk()
+    fh.seek(0)
+    return pd.read_csv(fh)
 
 # デッキ名からTierを出力する
 def Tier_of_Deck(deck_name):
@@ -1711,7 +1746,8 @@ def player_add():
             # 一時ファイルがあれば読み込んで session_state に反映
             temp_df = pd.read_csv("player/new_player_list.csv")
             st.session_state.player_df = temp_df
-            save_csv()
+            # save_csv()
+            save_csv_to_cloud(st.session_state.player_df)
             st.success("プレイヤー一覧を保存しました！")
         except FileNotFoundError:
             st.error("保存前に名前を追加してください。")
@@ -1991,33 +2027,43 @@ def quick_start():
 def debag():
     st.title("デバッグページ")
 
-    # Secret から JSON を取得
-    json_str = st.secrets["GCP_SERVICE_ACCOUNT_JSON"]
+    # import json
+    # import io
+    # from google.oauth2 import service_account
+    # from googleapiclient.discovery import build
+    # from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
-    # 一時ファイルとして保存
-    with open("service-account.json", "w") as f:
-        f.write(json_str)
+    # # -------------------
+    # # 認証
+    # # -------------------
+    # # Secret から JSON を取得
+    # json_str = st.secrets["GCP_SERVICE_ACCOUNT_JSON"]
 
-    # 認証スコープ（DriveとSheetsを両方使えるように）
-    SCOPES = ["https://www.googleapis.com/auth/drive"]
+    # # 一時ファイルとして保存
+    # with open("service-account.json", "w") as f:
+    #     f.write(json_str)
 
-    # JSONファイルを使って認証
-    creds = service_account.Credentials.from_service_account_file(
-    "service-account.json", scopes=SCOPES
-)
+    # # 認証スコープ（DriveとSheetsを両方使えるように）
+    # SCOPES = ["https://www.googleapis.com/auth/drive"]
 
-    service = build("drive", "v3", credentials=creds)
+    # # JSONファイルを使って認証
+    # creds = service_account.Credentials.from_service_account_file(
+    # "service-account.json", scopes=SCOPES
+    # )
+
+    # service = build("drive", "v3", credentials=creds)
 
     # -------------------
     # 実際の使い方
     # -------------------
-    FILE_ID = "1sTIqJlXNJuwfjeZDMCVMrzvRA5FkBKHZ"
 
     # -------------------
     # CSVを読み込む関数
     # -------------------
-    def load_csv(file_id):
-        request = service.files().get_media(fileId=file_id)
+    def load_csv_from_cloud():
+        FILE_ID = "1sTIqJlXNJuwfjeZDMCVMrzvRA5FkBKHZ"
+
+        request = st.session_state.service.files().get_media(fileId=FILE_ID)
         fh = io.BytesIO()
         downloader = MediaIoBaseDownload(fh, request)
         done = False
@@ -2029,19 +2075,22 @@ def debag():
     # -------------------
     # CSVを上書き保存する関数
     # -------------------
-    def save_csv(df, file_id):
+    def save_csv_to_cloud(df):
+        FILE_ID = "1sTIqJlXNJuwfjeZDMCVMrzvRA5FkBKHZ"
+
         df.to_csv("temp.csv", index=False)
         media = MediaFileUpload("temp.csv", mimetype="text/csv", resumable=True)
-        service.files().update(fileId=file_id, media_body=media).execute()
+        st.session_state.service.files().update(fileId=FILE_ID, media_body=media).execute()
 
     # -------------------
     # 使い方
     # -------------------
-    df = load_csv(FILE_ID)
+    df = load_csv_from_cloud()
     st.write(df.head())
 
     if st.button("データの上書き保存"):
-        save_csv(st.session_state.player_df, FILE_ID)
+        save_csv_to_cloud(st.session_state.player_df)
+        st.rerun()
     
 
 ##############################################################################################
@@ -2053,8 +2102,8 @@ def main():
 
     normalize_image_filenames()
 
-    page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート","デバッグページ"]
-    # page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート"]
+    # page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート","デバッグページ"]
+    page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート"]
 
     if "page_id" not in st.session_state:
         st.session_state.page_id = "ホーム画面"
@@ -2070,14 +2119,16 @@ def main():
                 # 一時ファイルがあれば読み込んで session_state に反映
                 temp_df = pd.read_csv("player/new_player_list.csv")
                 st.session_state.player_df = temp_df
-                save_csv()
+                # save_csv()
+                save_csv_to_cloud(st.session_state.player_df)
                 st.sidebar.success("プレイヤー一覧を保存しました！")
             except FileNotFoundError:
                 st.sidebar.error("保存前に名前を追加してください。")
 
         # ボタンを押すとPLAYER_DFの状態を更新
         if st.sidebar.button("プレイヤー一覧を読み込み",key=f"load_button_1"):
-            st.session_state.player_df = pd.read_csv("player/player.csv")
+            # st.session_state.player_df = pd.read_csv("player/player.csv")
+            st.session_state.player_df = load_csv_from_cloud()
 
         chec_box = st.sidebar.checkbox("画面更新用",key="update")
         if chec_box:
