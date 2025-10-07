@@ -212,32 +212,100 @@ def list_png_files(folder_path):
         return []
 
 # deck_listフォルダからcsvファイル名一覧を表示・選択する
-def select_csv_from_list_folder():
-    folder_path = "Deck_List"
+# def select_csv_from_list_folder(n=0):
+#     folder_path = "Deck_List"
 
-    # listフォルダ内のcsvファイルを取得
-    try:
-        csv_files = [f for f in os.listdir(folder_path) if f.endswith(".csv")]
-    except FileNotFoundError:
-        st.error(f"フォルダが見つかりません: {folder_path}")
+#     # listフォルダ内のcsvファイルを取得
+#     try:
+#         csv_files = [f for f in os.listdir(folder_path) if f.endswith(".csv")]
+#     except FileNotFoundError:
+#         st.error(f"フォルダが見つかりません: {folder_path}")
+#         return None
+
+#     if not csv_files:
+#         st.warning("Deck_List フォルダに CSV ファイルが見つかりませんでした。")
+#         return None
+
+#     # セッションキーを動的に分ける（ここがポイント！）
+#     filename_key = f"filename{n}"
+
+#     # セッションに保存されたファイル名を初期値に設定
+#     default_index = 0
+#     if filename_key in st.session_state:
+#         default_file = os.path.basename(st.session_state[filename_key])
+#         if default_file in csv_files:
+#             default_index = csv_files.index(default_file)
+
+#     # selectboxで選択（初期値を設定）
+#     selected_csv = st.selectbox("CSVファイルを選択してください", csv_files, index=default_index, key=f"select{n}")
+#     # ファイル名を個別に保持
+#     st.session_state[filename_key] = selected_csv
+
+#     return os.path.join(folder_path, selected_csv)
+
+def select_csv_from_list_folder(n=0):
+    FOLDER_ID = "1drE8CfWp2f82aqCGNKFaRfe9y5Cvyhr4"  # ← あなたのフォルダIDに変更
+    drive_service = st.session_state.service
+
+    # === Google Driveのフォルダ一覧を最初の1回だけ取得 ===
+    if "drive_csv_files" not in st.session_state:
+        try:
+            results = drive_service.files().list(
+                q=f"'{FOLDER_ID}' in parents and mimeType='text/csv' and trashed=false",
+                fields="files(id, name)",
+            ).execute()
+            st.session_state.drive_csv_files = results.get("files", [])
+            # st.success("✅ Google Driveのフォルダ内容を読み込みました。")
+        except Exception as e:
+            st.error(f"❌ Google Driveフォルダの読み込みに失敗しました: {e}")
+            return None
+    # else:
+        # st.info("（Driveの内容はキャッシュ済み）")
+
+    files = st.session_state.drive_csv_files
+
+    if not files:
+        st.warning("指定フォルダに CSV ファイルが見つかりませんでした。")
         return None
 
-    if not csv_files:
-        st.warning("Deck_List フォルダに CSV ファイルが見つかりませんでした。")
-        return None
+    # === ファイル名リストを取得 ===
+    csv_files = [f["name"] for f in files]
+    filename_key = f"filename{n}"
 
     # セッションに保存されたファイル名を初期値に設定
     default_index = 0
-    if "filename" in st.session_state:
-        default_file = os.path.basename(st.session_state.filename)
+    if filename_key in st.session_state:
+        default_file = st.session_state[filename_key]
         if default_file in csv_files:
             default_index = csv_files.index(default_file)
 
-    # selectboxで選択（初期値を設定）
-    selected_csv = st.selectbox("CSVファイルを選択してください", csv_files, index=default_index)
-    st.session_state.filename = selected_csv
+    # === selectboxで選択 ===
+    selected_csv = st.selectbox(
+        "CSVファイルを選択してください", csv_files, index=default_index, key=f"select{n}"
+    )
+    st.session_state[filename_key] = selected_csv
 
-    return os.path.join(folder_path, selected_csv)
+    # === ファイルの中身を読み込む ===
+    file_id = [f["id"] for f in files if f["name"] == selected_csv][0]
+
+    try:
+        request = drive_service.files().get_media(fileId=file_id)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+        fh.seek(0)
+
+        df = pd.read_csv(fh)
+    except Exception as e:
+        st.error(f"CSVファイルの読み込みに失敗しました: {e}")
+        return None
+
+    # st.write(f"読み込み中のファイル: {selected_csv}")
+    # st.dataframe(df)
+
+    return df
 
 # dfからタイトルを全て抽出する
 def extract_unique_titles(df):
@@ -703,16 +771,17 @@ def csv_app():
         st.session_state.filename = uploaded_file.name  # ファイル名も保存
     else:
         selected_csv_path = select_csv_from_list_folder()
-        if selected_csv_path:
-            df = pd.read_csv(selected_csv_path)
+        if selected_csv_path is not None:
+            # df = pd.read_csv(selected_csv_path)
+            df = selected_csv_path
             df = normalize_dataframe(df)
             df = sort_df(df)
             st.session_state.df = df
-            st.session_state.filename = os.path.basename(selected_csv_path)
+            # st.session_state.filename = os.path.basename(selected_csv_path)
 
     # セッションにデータがあるか安全に確認
     if "df" in st.session_state and st.session_state.df is not None:
-        st.write(f"アップロードされたファイル名: `{st.session_state.filename}`")
+        # st.write(f"アップロードされたファイル名: `{st.session_state.filename}`")
         check_box = st.checkbox("アップロードファイルを表示")
         if check_box:
             st.dataframe(st.session_state.df)
@@ -1175,6 +1244,13 @@ def duel():
             st.session_state.page_id = "対戦成績照会"
             st.session_state.page_id_flag = False
             st.rerun()
+
+    st.write("_____________________________________________________________")
+    if st.button("ユニアリビンゴ"):
+        st.session_state.page_id = "ユニアリビンゴ"
+        st.session_state.page_id_flag = False
+        st.rerun()
+
 # デッキ使用順の設定
 def duel_standby():
     st.title("デュエルスタンバイ")
@@ -1594,6 +1670,150 @@ def combine_grades():
         st.session_state.page_id_flag = True
         st.rerun()
 
+# ビンゴゲーム
+def bingo():
+    st.title("ユニアリビンゴ")
+
+    # ビンゴカード作成
+    # 3*3 or 5*5
+    st.session_state.card_size = st.radio("カードサイズ",["3*3","5*5"], horizontal=True)
+    if st.session_state.card_size == "3*3":
+        n = 3
+        random_bingo_deck_num = 9
+    elif st.session_state.card_size == "5*5":
+        n = 5
+        random_bingo_deck_num = 25
+    
+    st.write(random_bingo_deck_num)
+
+    colums = st.columns([20,1,20])
+    with colums[0]:
+        # ファイルを選択
+        st.write("_____________________________________________________________")
+        # ファイルアップロード
+        uploaded_file1 = st.file_uploader("CSVデータベースファイルをアップロードしてください", type="csv",key="upfile1")
+        st.write("_____________________________________________________________")
+
+        if uploaded_file1 is not None:
+            # CSVをデータフレームとして読み込む
+            df1 = pd.read_csv(uploaded_file1)
+            df1 = normalize_dataframe(df1)
+            df1 = sort_df(df1)
+            st.session_state.df_temp = df1  # セッションに保存
+            st.session_state.filename1 = uploaded_file1.name  # ファイル名も保存
+        else:
+            selected_csv_path = select_csv_from_list_folder(1)
+            if selected_csv_path is not None:
+                df1 = selected_csv_path
+                df1 = normalize_dataframe(df1)
+                df1 = sort_df(df1)
+                st.session_state.df_temp = df1
+                # st.session_state.filename1 = os.path.basename(selected_csv_path)
+
+            # セッションにデータがあるか安全に確認
+        # if "df_temp" in st.session_state and st.session_state.df_temp is not None:
+        #     st.write(f"アップロードされたファイル名: `{st.session_state.filename1}`")
+        # else:
+        #     st.info("CSVファイルをアップロードしてください。")
+
+        # ビンゴカード作成ボタン
+        if "output_bingo_decks" not in st.session_state:
+            st.session_state.output_bingo_decks = []
+
+        if st.button("ビンゴカード作成",key="button1"):
+            st.session_state.output_bingo_decks = []
+            for _ in range(random_bingo_deck_num):
+                deck_list_temp = []
+                # ランダムにデッキを出力
+                while True:
+                    random_value = get_random(st.session_state.df_temp)
+                    # 重複してたらもう一度実行する
+                    if random_value not in st.session_state.output_bingo_decks:
+                        break
+
+                st.session_state.output_bingo_decks.append(random_value)
+
+        # 画像表示（選ばれていれば常に表示）
+        if st.session_state.output_bingo_decks != []:
+            # 画像を3つずつ横並びで表示
+            for i in range(0, len(st.session_state.output_bingo_decks), n):
+                cols = st.columns(n)
+                for j, image_name in enumerate(st.session_state.output_bingo_decks[i:i+n]):
+                    with cols[j]:
+                        output_image_name = image_name + ".png"
+                        output_image(st.session_state.df_temp, output_image_name, False)
+
+    with colums[1]:
+        st.markdown(
+            """
+            <div style='border-left: 2px solid #ccc; height: 900px; margin: 0 auto;'></div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    with colums[2]:
+        # ファイルを選択
+        st.write("_____________________________________________________________")
+        # ファイルアップロード
+        uploaded_file2 = st.file_uploader("CSVデータベースファイルをアップロードしてください", type="csv",key="upfile2")
+        st.write("_____________________________________________________________")
+
+        if uploaded_file2 is not None:
+            # CSVをデータフレームとして読み込む
+            df2 = pd.read_csv(uploaded_file2)
+            df2 = normalize_dataframe(df2)
+            df2 = sort_df(df2)
+            st.session_state.df_temp2 = df2  # セッションに保存
+            st.session_state.filename2 = uploaded_file2.name  # ファイル名も保存
+        else:
+            selected_csv_path2 = select_csv_from_list_folder(2)
+            if selected_csv_path2 is not None:
+                df2 = selected_csv_path2
+                df2 = normalize_dataframe(df2)
+                df2 = sort_df(df2)
+                st.session_state.df_temp2 = df2
+                # st.session_state.filename2 = os.path.basename(selected_csv_path2)
+
+            # セッションにデータがあるか安全に確認
+        # if "df_temp2" in st.session_state and st.session_state.df_temp2 is not None:
+        #     st.write(f"アップロードされたファイル名: `{st.session_state.filename2}`")
+        # else:
+        #     st.info("CSVファイルをアップロードしてください。")
+
+        # ビンゴカード作成ボタン
+        if "output_bingo_decks2" not in st.session_state:
+            st.session_state.output_bingo_decks2 = []
+
+        if st.button("ビンゴカード作成",key="button2"):
+            st.session_state.output_bingo_decks2 = []
+            for _ in range(random_bingo_deck_num):
+                deck_list_temp2 = []
+                # ランダムにデッキを出力
+                while True:
+                    random_value = get_random(st.session_state.df_temp2)
+                    # 重複してたらもう一度実行する
+                    if random_value not in st.session_state.output_bingo_decks2:
+                        break
+
+                st.session_state.output_bingo_decks2.append(random_value)
+
+        # 画像表示（選ばれていれば常に表示）
+        if st.session_state.output_bingo_decks2 != []:
+            # 画像を3つずつ横並びで表示
+            for i in range(0, len(st.session_state.output_bingo_decks2), n):
+                cols = st.columns(n)
+                for j, image_name2 in enumerate(st.session_state.output_bingo_decks2[i:i+n]):
+                    with cols[j]:
+                        output_image_name2 = image_name2 + ".png"
+                        output_image(st.session_state.df_temp2, output_image_name2, False)
+
+
+    st.write("_____________________________________________________________")
+    if st.button("戻る"):
+        st.session_state.page_id = "デュエル"
+        st.session_state.page_id_flag = True
+        st.rerun()
+
 def player_info():
     st.title("プレイヤー情報")
 
@@ -1847,7 +2067,7 @@ def Tier_list_check_ALL():
                 st.info("該当条件を満たすデッキはありません")
 
             n = 10
-            # 画像を3つずつ横並びで表示
+            # 画像を10つずつ横並びで表示
             for i in range(0, len(image_names), n):
                 cols = st.columns(n)
                 for j, image_name in enumerate(image_names[i:i+n]):
@@ -1861,16 +2081,17 @@ def Tier_list_check_ALL():
 def quick_start():
     st.subheader("デッキリスト選択")
     selected_csv_path = select_csv_from_list_folder()
-    if selected_csv_path:
-        df = pd.read_csv(selected_csv_path)
+    if selected_csv_path is not None:
+        # df = pd.read_csv(selected_csv_path)
+        df = selected_csv_path
         df = normalize_dataframe(df)
         df = sort_df(df)
         st.session_state.df = df
-        st.session_state.filename = os.path.basename(selected_csv_path)
+        # st.session_state.filename = os.path.basename(selected_csv_path)
 
     # セッションにデータがあるか安全に確認
     if "df" in st.session_state and st.session_state.df is not None:
-        st.write(f"アップロードされたファイル名: `{st.session_state.filename}`")
+        # st.write(f"アップロードされたファイル名: `{st.session_state.filename}`")
         check_box = st.checkbox("アップロードファイルを表示")
         if check_box:
             st.dataframe(st.session_state.df)
@@ -2026,72 +2247,72 @@ def quick_start():
 
 def debag():
     st.title("デバッグページ")
+    # ファイル読み込み
+        # def load_csv_from_cloud():
+        #     FILE_ID = "1sTIqJlXNJuwfjeZDMCVMrzvRA5FkBKHZ"
 
-    # import json
-    # import io
-    # from google.oauth2 import service_account
-    # from googleapiclient.discovery import build
-    # from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
+        #     request = st.session_state.service.files().get_media(fileId=FILE_ID)
+        #     fh = io.BytesIO()
+        #     downloader = MediaIoBaseDownload(fh, request)
+        #     done = False
+        #     while not done:
+        #         status, done = downloader.next_chunk()
+        #     fh.seek(0)
+        #     return pd.read_csv(fh)
 
-    # # -------------------
-    # # 認証
-    # # -------------------
-    # # Secret から JSON を取得
-    # json_str = st.secrets["GCP_SERVICE_ACCOUNT_JSON"]
+        # # -------------------
+        # # CSVを上書き保存する関数
+        # # -------------------
+        # def save_csv_to_cloud(df):
+        #     # FILE_ID = "1sTIqJlXNJuwfjeZDMCVMrzvRA5FkBKHZ"
 
-    # # 一時ファイルとして保存
-    # with open("service-account.json", "w") as f:
-    #     f.write(json_str)
+        #     FILE_ID = "1drE8CfWp2f82aqCGNKFaRfe9y5Cvyhr4"
 
-    # # 認証スコープ（DriveとSheetsを両方使えるように）
-    # SCOPES = ["https://www.googleapis.com/auth/drive"]
+        #     df.to_csv("temp.csv", index=False)
+        #     media = MediaFileUpload("temp.csv", mimetype="text/csv", resumable=True)
+        #     st.session_state.service.files().update(fileId=FILE_ID, media_body=media).execute()
 
-    # # JSONファイルを使って認証
-    # creds = service_account.Credentials.from_service_account_file(
-    # "service-account.json", scopes=SCOPES
-    # )
+        # # -------------------
+        # # 使い方
+        # # -------------------
+        # df = load_csv_from_cloud()
+        # st.write(df.head())
 
-    # service = build("drive", "v3", credentials=creds)
+        # if st.button("データの上書き保存"):
+        #     save_csv_to_cloud(st.session_state.player_df)
+        #     st.rerun()
 
-    # -------------------
-    # 実際の使い方
-    # -------------------
+        # === フォルダIDを指定 ===
+    FOLDER_ID = "1drE8CfWp2f82aqCGNKFaRfe9y5Cvyhr4"
 
-    # -------------------
-    # CSVを読み込む関数
-    # -------------------
-    def load_csv_from_cloud():
-        FILE_ID = "1sTIqJlXNJuwfjeZDMCVMrzvRA5FkBKHZ"
+    # === フォルダ内のCSVファイル一覧を取得 ===
+    results = st.session_state.service.files().list(
+        q=f"'{FOLDER_ID}' in parents and mimeType='text/csv'",
+        fields="files(id, name)"
+    ).execute()
+    files = results.get("files", [])
 
-        request = st.session_state.service.files().get_media(fileId=FILE_ID)
+    if not files:
+        st.error("フォルダ内にCSVファイルが見つかりません。")
+    else:
+        file_names = [f["name"] for f in files]
+        selected_file = st.selectbox("CSVファイルを選択してください", file_names)
+
+        # 選択されたファイルのIDを取得
+        file_id = [f["id"] for f in files if f["name"] == selected_file][0]
+
+        # === ファイルをダウンロードしてDataFrameに ===
+        request = st.session_state.service.files().get_media(fileId=file_id)
         fh = io.BytesIO()
         downloader = MediaIoBaseDownload(fh, request)
         done = False
         while not done:
             status, done = downloader.next_chunk()
         fh.seek(0)
-        return pd.read_csv(fh)
 
-    # -------------------
-    # CSVを上書き保存する関数
-    # -------------------
-    def save_csv_to_cloud(df):
-        FILE_ID = "1sTIqJlXNJuwfjeZDMCVMrzvRA5FkBKHZ"
+        df = pd.read_csv(fh)
+        st.dataframe(df)
 
-        df.to_csv("temp.csv", index=False)
-        media = MediaFileUpload("temp.csv", mimetype="text/csv", resumable=True)
-        st.session_state.service.files().update(fileId=FILE_ID, media_body=media).execute()
-
-    # -------------------
-    # 使い方
-    # -------------------
-    df = load_csv_from_cloud()
-    st.write(df.head())
-
-    if st.button("データの上書き保存"):
-        save_csv_to_cloud(st.session_state.player_df)
-        st.rerun()
-    
 
 ##############################################################################################
 
@@ -2102,8 +2323,8 @@ def main():
 
     normalize_image_filenames()
 
-    # page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート","デバッグページ"]
-    page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート"]
+    page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート","デバッグページ"]
+    # page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート"]
 
     if "page_id" not in st.session_state:
         st.session_state.page_id = "ホーム画面"
@@ -2175,6 +2396,9 @@ def main():
 
     if st.session_state.page_id == "成績ファイル結合":
         combine_grades()
+
+    if st.session_state.page_id == "ユニアリビンゴ":
+        bingo()
 
     if st.session_state.page_id == "プレイヤー情報":
         player_info()
