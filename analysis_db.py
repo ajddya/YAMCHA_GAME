@@ -2282,36 +2282,6 @@ def debag():
         #     save_csv_to_cloud(st.session_state.player_df)
         #     st.rerun()
 
-        # === フォルダIDを指定 ===
-    FOLDER_ID = "1drE8CfWp2f82aqCGNKFaRfe9y5Cvyhr4"
-
-    # === フォルダ内のCSVファイル一覧を取得 ===
-    results = st.session_state.service.files().list(
-        q=f"'{FOLDER_ID}' in parents and mimeType='text/csv'",
-        fields="files(id, name)"
-    ).execute()
-    files = results.get("files", [])
-
-    if not files:
-        st.error("フォルダ内にCSVファイルが見つかりません。")
-    else:
-        file_names = [f["name"] for f in files]
-        selected_file = st.selectbox("CSVファイルを選択してください", file_names)
-
-        # 選択されたファイルのIDを取得
-        file_id = [f["id"] for f in files if f["name"] == selected_file][0]
-
-        # === ファイルをダウンロードしてDataFrameに ===
-        request = st.session_state.service.files().get_media(fileId=file_id)
-        fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-        fh.seek(0)
-
-        df = pd.read_csv(fh)
-        st.dataframe(df)
 
 
 ##############################################################################################
@@ -2323,8 +2293,8 @@ def main():
 
     normalize_image_filenames()
 
-    page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート","デバッグページ"]
-    # page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート"]
+    # page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート","デバッグページ"]
+    page_id_list = ["データベース選択","ランダム抽出","デッキリスト_カスタマイズ","デュエル","プレイヤー情報","プレイヤー設定","Tier表","クイックスタート"]
 
     if "page_id" not in st.session_state:
         st.session_state.page_id = "ホーム画面"
