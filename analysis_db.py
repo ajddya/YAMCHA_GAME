@@ -17,6 +17,8 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
+from PIL import Image
+
 button_css1 = f"""
     <style>
         div.stButton > button:first-child  {{
@@ -1670,6 +1672,82 @@ def combine_grades():
         st.session_state.page_id_flag = True
         st.rerun()
 
+# 画像を5*5にまとめる
+def combine_images(image_names, grid_size=(5, 5), padding=10, bg_color=(255, 255, 255, 255)):
+    """
+    画像名リストから5x5グリッド画像を作成。
+    各画像の上下左右に余白を付け、背景色を指定可能。
+    """
+    color_folders = ["image/赤", "image/青", "image/緑", "image/黄", "image/紫"]
+    images = []
+
+    for image_name in image_names:
+        found_path = None
+
+        image_name = image_name + ".png"
+        
+        for folder in color_folders:
+            img_path = os.path.join(folder, image_name)
+            if os.path.exists(img_path):
+                found_path = img_path
+                break
+
+        if found_path is None:
+            st.error(f"画像ファイルが見つかりません: {image_name}")
+            continue
+
+        try:
+            img = Image.open(found_path).convert("RGBA")
+            images.append(img)
+        except Exception as e:
+            st.error(f"画像の読み込みに失敗しました: {image_name} ({e})")
+
+    if not images:
+        st.error("有効な画像が1つも見つかりませんでした。")
+        return None
+
+    # 1枚目の画像サイズを基準にする
+    w, h = images[0].size
+    grid_w, grid_h = grid_size
+
+    # 余白＋背景色付きキャンバスを作成
+    canvas_width = w * grid_w + padding * (grid_w + 1)
+    canvas_height = h * grid_h + padding * (grid_h + 1)
+    canvas = Image.new("RGBA", (canvas_width, canvas_height), bg_color)
+
+    for idx, img in enumerate(images):
+        if idx >= grid_w * grid_h:
+            break
+        x = padding + (idx % grid_w) * (w + padding)
+        y = padding + (idx // grid_w) * (h + padding)
+        canvas.paste(img, (x, y), mask=img)
+
+    return canvas
+
+# 2つの画像群を１つの画像にする
+def combine_two_boards(board1, board2, space=50):
+    """
+    2つの画像を横並びに結合。
+    左背景＝白、右背景＝黒。
+    """
+
+    # 左（白）と右（黒）をRGBAで作成
+    white_bg = Image.new("RGBA", board1.size, (255, 255, 255, 255))
+    black_bg = Image.new("RGBA", board2.size, (0, 0, 0, 255))
+
+    # 背景合成（透過がある場合も対応）
+    board1_on_white = Image.alpha_composite(white_bg, board1)
+    board2_on_black = Image.alpha_composite(black_bg, board2)
+
+    # 2枚を横に並べる
+    total_width = board1.width + board2.width + space
+    max_height = max(board1.height, board2.height)
+    combined = Image.new("RGBA", (total_width, max_height), (255, 255, 255, 255))
+
+    combined.paste(board1_on_white, (0, 0))
+    combined.paste(board2_on_black, (board1.width + space, 0))
+
+    return combined
 # ビンゴゲーム
 def bingo():
     st.title("ユニアリビンゴ")
@@ -1684,7 +1762,7 @@ def bingo():
         n = 5
         random_bingo_deck_num = 25
     
-    st.write(random_bingo_deck_num)
+    # st.write(random_bingo_deck_num)
 
     colums = st.columns([20,1,20])
     with colums[0]:
@@ -1806,6 +1884,34 @@ def bingo():
                     with cols[j]:
                         output_image_name2 = image_name2 + ".png"
                         output_image(st.session_state.df_temp2, output_image_name2, False)
+
+    if st.session_state.output_bingo_decks2 != [] and st.session_state.output_bingo_decks != []:
+        # ====== ③ Streamlit側の統合処理 ======
+        if st.button("2つのビンゴカードを1枚にまとめて出力"):
+            if st.session_state.output_bingo_decks and st.session_state.output_bingo_decks2:
+                # 画像名リスト（例: 'A1.png', ...）
+                image_list1 = [name + ".png" for name in st.session_state.output_bingo_decks]
+                image_list2 = [name + ".png" for name in st.session_state.output_bingo_decks2]
+
+                # 各5x5画像群を作成
+                board1 = combine_images(st.session_state.output_bingo_decks, grid_size=(5, 5), padding=15, bg_color=(255, 255, 255, 255))
+                board2 = combine_images(st.session_state.output_bingo_decks2, grid_size=(5, 5), padding=15, bg_color=(0, 0, 0, 255))
+
+                # 2つを横並びに合成
+                if board1 and board2:
+                    combined = combine_two_boards(board1, board2, space=80)
+                    combined.save("bingo_combined.png")
+                    # st.image(combined, caption="白と黒のビンゴカード（余白付き）", use_container_width=True)
+
+                with open("bingo_combined.png", "rb") as f:
+                    st.download_button(
+                        label="画像をダウンロード",
+                        data=f,
+                        file_name="bingo_combined.png",
+                        mime="image/png"
+                    )
+            else:
+                st.warning("両方のビンゴカードを作成してから出力してください。")
 
 
     st.write("_____________________________________________________________")
@@ -2281,8 +2387,6 @@ def debag():
         # if st.button("データの上書き保存"):
         #     save_csv_to_cloud(st.session_state.player_df)
         #     st.rerun()
-
-
 
 ##############################################################################################
 
